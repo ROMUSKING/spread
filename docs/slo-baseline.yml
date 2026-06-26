@@ -1,0 +1,498 @@
+version: 0.16.1
+last_reviewed: '2026-06-26'
+status: v0.16.1 runnable project bootstrap baseline
+datasets:
+  pilot: pilot-v1-small
+  batch_fixtures: tests/fixtures/batch
+  rls_scope_fixtures: tests/fixtures/security/rls-cardinality
+  ledger_fixtures: tests/fixtures/ledger
+phase0_slos:
+  edit_p95_ms: 180
+  edit_p99_ms: 350
+  command_status_lookup_p95_ms: 60
+  polling_lag_p99_s: 8
+  polling_full_refresh_max_s: 3
+  outbox_replay_10k_events_p95_s: 10
+  rate_limiter_overhead_p95_ms: 5
+  batch_10k_validation_ms: 400
+  batch_10k_component_compile_ms: 200
+  formula_warm_delta_ms: 30
+  formula_cold_rebuild_p95_s: 5
+  notify_commit_delta_p95_ms: 50
+  rls_query_plan_p95_ms: 120
+  client_pending_state_render_ms: 100
+  vertical_slice_acceptance_max_days: 5
+  ledger_pg_post_10k_p95_s: 20
+  ledger_projection_rebuild_10k_p95_s: 30
+  ledger_shadow_reconciliation_lag_p99_s: 60
+  ledger_pending_expiry_lag_p99_s: 15
+  ledger_pending_to_posted_p95_ms: 250
+  ledger_pending_void_reconciliation_lag_p99_s: 60
+  ledger_same_ledger_validation_p95_ms: 20
+  ledger_field_policy_validation_p95_ms: 100
+  ledger_shadow_lag_p99_s: 60
+  ledger_reconciliation_p99_s: 120
+  ledger_strict_shadow_write_overhead_p95_ms: 100
+  ledger_shadow_mismatch_allowed: false
+  live_100_sse_subscribers_p99_lag_s: 8
+  wakeup_coalescing_duplicate_delivery_allowed: false
+  chaos_command_recovery_max_s: 30
+  response_ref_key_rotation_max_s: 30
+  ai_retrieval_p95_ms: 250
+  ai_permission_filter_overhead_p95_ms: 25
+  ai_embedding_job_lag_p99_s: 120
+  ai_regulated_embedding_escape_count: 0
+  duckdb_artifact_query_1m_p95_s: 8
+  duckdb_artifact_query_10m_p95_s: 20
+  duckdb_export_lag_p99_s: 120
+  duckdb_edit_path_regression_allowed: false
+  analytics_permission_bypass_allowed: false
+  data_plane_source_freshness_visible_required: true
+  analytics_snapshot_export_1m_p95_s: 45
+  analytics_duckdb_query_1m_p95_s: 8
+  analytics_pg_attach_edit_p95_delta_ms: 10
+  analytics_permission_filter_p95_ms: 50
+  analytics_snapshot_high_watermark_lag_p99_s: 120
+  analytics_duckdb_memory_peak_mb: 1024
+  analytics_result_lineage_required: true
+  synergy_cross_plane_envelope_validation_p95_ms: 50
+  synergy_degraded_fallback_p95_s: 30
+  synergy_direct_mutation_violations_allowed: false
+  synergy_cross_plane_lineage_p95_ms: 50
+  synergy_stale_plane_degradation_max_s: 30
+  synergy_permission_scope_consistency_required: true
+  synergy_specialized_plane_write_bypass_allowed: false
+  outbox_dispatch_lag_p99_s: 10
+  outbox_derived_plane_job_lag_p99_s: 120
+  outbox_command_commit_delta_p95_ms: 5
+  outbox_duplicate_business_effect_count: 0
+  outbox_regulated_route_escape_count: 0
+  cdc_shadow_parity_mismatch_count: 0
+  outbox_poll_sql_p99_ms: 250
+  outbox_poll_cycle_p99_ms: 750
+  outbox_payload_fetch_p99_ms: 500
+  outbox_envelope_row_target_bytes: 2048
+  outbox_envelope_row_alert_bytes: 4096
+  outbox_inline_payload_target_bytes: 65536
+  outbox_bytes_per_poll_max: 2097152
+  retrieval_revalidator_p95_ms: 30
+  retrieval_revalidator_bypass_allowed: false
+  command_boundary_tx_rollback_leak_count: 0
+  retrieval_revalidator_warm_cache_p95_ms: 30
+  retrieval_revalidator_cold_cache_p95_ms: 100
+  otel_reference_required: true
+  command_business_tx_p95_ms: 180
+  command_terminalization_failure_count: 0
+  retrieval_revalidator_cache_ttl_max_s: 30
+  retrieval_revalidator_100_candidates_p95_ms: 60
+  observability_required_span_attr_coverage_percent: 100
+  ledger_shadow_worker_blocks_mvp_edit_path_allowed: false
+  integration_runtime_required_in_phase0: false
+  external_call_inside_command_transaction_allowed: false
+  external_outbound_dispatch_p95_ms: 250
+  external_outbound_delivery_lag_p99_s: 60
+  external_inbound_dedupe_p95_ms: 30
+  external_webhook_signature_validation_p95_ms: 25
+  external_regulated_export_escape_count: 0
+  external_connector_outage_command_commit_delta_p95_ms: 0
+  external_inbound_scan_p95_ms: 500
+  external_inbound_schema_validation_p95_ms: 100
+  external_payload_max_bytes_default: 10485760
+  integration_secret_rotation_max_days: 90
+  integration_secret_plaintext_occurrences_allowed: 0
+  integration_staging_rate_limited_required: true
+  snapshot_read_path_required: true
+  agent_skeletons_required_for_core_boundaries: true
+  validation_waiver_log_required: true
+  agent_simulation_rejection_required: true
+  tile_transpose_command_bypass_allowed: false
+  phase0_post_mvp_runtime_admission_allowed: false
+  snapshot_start_here_visible_required: true
+  snapshot_first_read_enforcement_required: true
+  agent_simulation_rejection_p95_ms: 500
+  agent_simulation_false_accept_count: 0
+  pr_handoff_examples_required: true
+  snapshot_first_read_check_p95_ms: 50
+  snapshot_authority_diagram_required: true
+  snapshot_agent_no_go_checklist_required: true
+  agent_pr_example_artifacts_required: true
+  snapshot_authority_map_first_required: true
+  snapshot_authority_diagram_first_required: true
+  agent_pr_handoff_example_count_min: 2
+  agent_simulation_rejection_static_check_p95_s: 0.5
+  agent_simulation_rejection_manifest_check_p95_s: 5
+  repo_structure_validation_required: true
+  scoped_agent_instructions_required: true
+  source_stubs_present_required: true
+  repo_smoke_required: true
+  repo_smoke_p95_ms: 1000
+  active_spec_singleton_required: true
+  docs_skeletons_typescript_duplicates_allowed: false
+  repo_smoke_typecheck_required: true
+  active_v0160_reference_sweep_required: true
+  snapshot_repository_tree_required: true
+  repo_smoke_p95_s: 10
+  repo_smoke_uses_tsc_no_emit: true
+  generated_build_artifacts_absent_required: true
+  stale_active_v015x_reference_count: 0
+  bootstrap_completion_declared_required: true
+  package_smoke_tests_required: true
+  package_smoke_test_p95_s: 5
+  smoke_typecheck_tsc_resolution_documented_required: true
+  vertical_slice_release_note_template_required: true
+regression_rules:
+  investigation_threshold_percent: 15
+  block_threshold_percent: 25
+  waiver_required:
+  - Engineering
+  - SRE
+  - Security
+benchmarks:
+  BENCH-CMD-001:
+    target_p95_ms: 180
+    block_threshold_percent: 25
+    dataset: pilot-v1-small
+  BENCH-LIVE-001:
+    polling_lag_p99_s: 8
+    replay_10k_events_p95_s: 10
+    duplicate_delivery_allowed: false
+    dataset: pilot-v1-small
+    concurrent_sse_subscribers_per_instance: 100
+    wakeup_coalescing_required: true
+    poll_sql_p99_ms: 250
+    poll_cycle_p99_ms: 750
+    payload_fetch_p99_ms: 500
+    no_seq_scan_required: true
+    demand_filter_before_payload_fetch_required: true
+  BENCH-NOTIFY-001:
+    notify_commit_delta_p95_ms: 50
+    queue_usage_warn_fraction: 0.25
+    queue_usage_page_fraction: 0.5
+    admission_effect: enable_or_disable_notify
+  BENCH-RATE-001:
+    overhead_p95_ms: 5
+    concurrent_users: 100
+    ordinary_edit_pg_counter_writes_allowed: false
+  BENCH-BATCH-001:
+    rows:
+    - 100
+    - 1000
+    - 10000
+    target_10k_validation_ms: 400
+    component_compile_10k_ms: 200
+    incorrect_partition_commits_allowed: false
+  BENCH-FORM-001:
+    warm_delta_p95_ms: 30
+    cold_rebuild_p95_s: 5
+    stale_safe_required: true
+  BENCH-RLS-001:
+    query_plan_p95_ms: 120
+    sequential_scan_requires_waiver: true
+  BENCH-VSLICE-001:
+    target_completion_days: 5
+    dataset: pilot-v1-small
+    required_paths:
+    - command_log
+    - audit_events
+    - domain_events
+    - outbox_events
+    - sse_handshake
+    - command_status_recovery
+  BENCH-CLIENT-001:
+    pending_render_ms: 100
+    ambiguous_blind_retry_allowed: false
+    silent_conflict_overwrite_allowed: false
+  BENCH-LEDGER-001:
+    pg_adapter_post_10k_p95_s: 20
+    projection_rebuild_10k_p95_s: 30
+    duplicate_transfer_ids_allowed: false
+    direct_balance_updates_allowed: false
+    dataset: ledger-fixtures-v1
+  BENCH-LEDGER-002:
+    tigerbeetle_shadow_required: true
+    shadow_reconciliation_lag_p99_s: 60
+    balance_mismatches_allowed: false
+    admission_effect: tigerbeetle_cutover_decision
+    shadow_lag_p99_s: 60
+    reconciliation_p99_s: 120
+    strict_shadow_write_overhead_p95_ms: 100
+    shadow_mismatches_allowed: false
+  BENCH-LEDGER-003:
+    stock_receive_reserve_ship_required: true
+    negative_available_stock_allowed: false
+    same_ledger_enforcement_required: true
+    stock_cross_sku_without_transform_allowed: false
+    pending_expiry_lag_p99_s: 15
+    pending_to_posted_p95_ms: 250
+  BENCH-LEDGER-004:
+    financial_multileg_group_required: true
+    debits_equal_credits_required: true
+    linked_group_semantics_required: true
+  BENCH-LEDGER-005:
+    ambiguous_recovery_by_transfer_lookup_required: true
+    blind_retry_allowed: false
+  BENCH-LEDGER-007:
+    queryfilter_mirror_indexes_required: true
+    accountfilter_mirror_indexes_required: true
+    broad_seq_scan_allowed_on_pilot: false
+    high_cardinality_sku_query_plan_required: true
+  BENCH-LEDGER-006:
+    post_cutover_pg_repair_required: true
+    blind_retry_allowed: false
+    projection_outbox_repair_required: true
+  BENCH-LEDGER-FIELD-001:
+    field_assignment_policy_required: true
+    postgres_mirror_indexes_required: true
+    duplicate_field_semantics_allowed: false
+    selected_strategy: hybrid_dimension_accounts_movement_transfers
+    u16_code_range_required: true
+    u32_ledger_range_required: true
+    u128_reserved_id_checks_required: true
+    canonical_transfer_id_pointer_required: true
+  BENCH-CHAOS-001:
+    command_recovery_required: true
+    outbox_retention_gap_refresh_required: true
+    post_cutover_repair_required: true
+    dataset: pilot-v1-small
+  BENCH-AI-001:
+    retrieval_p95_ms: 250
+    permission_filter_overhead_p95_ms: 25
+    tenant_permission_bypass_allowed: false
+  BENCH-AI-002:
+    embedding_job_lag_p99_s: 120
+    source_version_invalidation_required: true
+  BENCH-AI-003:
+    regulated_embedding_escape_count: 0
+    suggestions_require_command_handler: true
+  BENCH-DUCKDB-001:
+    artifact_query_1m_p95_s: 3
+    artifact_query_10m_p95_s: 20
+    permission_filter_required: true
+  BENCH-DUCKDB-002:
+    export_lag_p99_s: 120
+    artifact_watermark_completeness_required: true
+    schema_hash_required: true
+  BENCH-DUCKDB-003:
+    postgres_projection_parity_required: true
+    exact_fields_tolerance: 0
+  BENCH-DUCKDB-004:
+    ledger_derived_projection_only: true
+    raw_unreconciled_ledger_query_allowed: false
+  BENCH-DATA-PLANE-001:
+    pgvector_context_plus_duckdb_aggregate_required: true
+    vector_similarity_as_numeric_truth_allowed: false
+    source_freshness_visible_required: true
+  BENCH-ANALYTICS-001:
+    snapshot_export_1m_p95_s: 45
+    lineage_required: true
+    default_format: parquet
+  BENCH-ANALYTICS-002:
+    duckdb_query_1m_p95_s: 8
+    duckdb_query_10m_p95_s: 45
+    memory_peak_mb: 1024
+  BENCH-ANALYTICS-003:
+    postgres_attach_internal_only: true
+    edit_p95_delta_ms: 10
+    admission_effect: disable_or_allow_internal_attach
+  BENCH-ANALYTICS-004:
+    tenant_permission_escape_allowed: false
+    permission_filter_p95_ms: 50
+  BENCH-ANALYTICS-005:
+    high_watermark_required: true
+    schema_hash_required: true
+    snapshot_lag_p99_s: 120
+  BENCH-ANALYTICS-006:
+    timeout_enforced: true
+    memory_limit_enforced: true
+    output_limit_enforced: true
+  BENCH-ANALYTICS-007:
+    multi_plane_answer_requires_deterministic_query: true
+    vector_similarity_truth_allowed: false
+  BENCH-SYNERGY-001:
+    cross_plane_envelope_validation_p95_ms: 50
+    direct_mutation_violations_allowed: false
+    cross_plane_lineage_required: true
+    permission_scope_consistency_required: true
+    specialized_plane_write_bypass_allowed: false
+    stale_plane_degradation_max_s: 30
+    deterministic_source_references_required: true
+  BENCH-SYNERGY-002:
+    specialized_plane_failure_degrades_safely: true
+    fallback_p95_s: 30
+  BENCH-SYNERGY-003:
+    ai_duckdb_ledger_answers_require_deterministic_citations: true
+    similarity_score_as_truth_allowed: false
+  BENCH-AI-004:
+    hybrid_precision_at_10_min: 0.85
+    identifier_hit_rate_min: 0.98
+    pure_vector_may_not_replace_hybrid: true
+    rank_fusion_required: true
+  BENCH-AI-005:
+    ann_recall_at_10_min: 0.95
+    ann_filtered_result_count_min: 10
+    exact_baseline_required: true
+    hnsw_ivfflat_comparison_required: true
+    index_build_cost_recorded: true
+  BENCH-AI-006:
+    semantic_feed_lag_p99_s: 120
+    retrieval_revalidation_p95_ms: 30
+    dedicated_semantic_db_allowed_after_evidence: true
+    source_high_watermark_required: true
+    retrieval_revalidator_p95_ms: 30
+    revalidator_required_before_user_visible_result: true
+  BENCH-OUTBOX-001:
+    target_dispatch_lag_p99_s: 10
+    command_commit_delta_p95_ms: 5
+    duplicate_business_effect_count: 0
+    mvp_polling_reader_regression_allowed: false
+    outbox_bloat_high_churn_required: true
+  BENCH-OUTBOX-002:
+    cdc_shadow_parity_required: true
+    payload_hash_mismatch_allowed: false
+  BENCH-OUTBOX-003:
+    broker_outage_blocks_command_commit: false
+    duplicate_delivery_dedup_required: true
+  BENCH-OUTBOX-004:
+    semantic_job_lag_p99_s: 120
+    analytics_job_lag_p99_s: 120
+    ledger_repair_notice_p99_s: 30
+  BENCH-OUTBOX-005:
+    schema_compatibility_window_required: true
+    regulated_route_escape_count: 0
+  BENCH-LIVE-OUTBOX-POLL-001:
+    events_in_window: 10000
+    concurrent_sse_subscribers_per_instance: 100
+    poll_sql_p99_ms: 250
+    poll_cycle_p99_ms: 750
+    payload_fetch_p99_ms: 500
+    envelope_row_alert_bytes: 4096
+    inline_payload_target_bytes: 65536
+    bytes_per_poll_max: 2097152
+    explain_no_seq_scan_required: true
+    payload_fetch_after_demand_filter_required: true
+    retention_gap_sync_required: true
+  BENCH-CMD-TX-001:
+    atomic_boundary_required: true
+    leaked_partial_writes_allowed: false
+    numeric_ledger_port_same_tx_required: true
+    dataset: pilot-v1-small
+  BENCH-OBS-002:
+    otel_reference_required: true
+    command_outbox_retrieval_spans_required: true
+    dashboard_drift_allowed: false
+  BENCH-REVALIDATOR-001:
+    warm_cache_p95_ms: 10
+    cold_path_p95_ms: 30
+    cache_expands_permissions_allowed: false
+  BENCH-LEDGER-SHADOW-OPS-001:
+    shadow_day_in_life_drill_required: true
+    mismatch_allowed: false
+    cutover_blocked_on_backlog_breach: true
+  BENCH-AI-REVALIDATOR-001:
+    revalidate_50_candidates_p95_ms: 30
+    revalidate_100_candidates_p95_ms: 60
+    permission_cache_hit_p95_ms: 10
+    cache_expands_permissions_allowed: false
+  BENCH-INTEGRATION-001:
+    inbound_staging_command_proposal_p95_ms: 250
+    payload_hash_required: true
+    command_proposal_required: true
+  BENCH-INTEGRATION-002:
+    outbound_delivery_planning_p95_ms: 150
+    command_commit_delta_p95_ms: 5
+    external_call_inside_command_tx_allowed: false
+  BENCH-INTEGRATION-003:
+    queued_deliveries: 10000
+    duplicate_business_effect_count: 0
+    delivery_replay_required: true
+  BENCH-INTEGRATION-004:
+    dead_letter_replay_required: true
+    suppression_required: true
+    operator_audit_required: true
+  BENCH-INTEGRATION-005:
+    external_mapping_lookup_p99_ms: 50
+    mapping_conflict_blocks_command: true
+    source_version_required: true
+  BENCH-INTEGRATION-006:
+    classification_filter_p95_ms: 30
+    regulated_sink_escape_count: 0
+    redaction_policy_required: true
+  BENCH-INTEGRATION-007:
+    high_volume_inbound_staging_required: true
+    staged_payloads: 10000
+    rate_limit_pressure_required: true
+    connector_outage_simulation_required: true
+    malware_scan_required: true
+    schema_validation_required: true
+    idempotency_property_tests_required: true
+    duplicate_business_effect_count: 0
+  BENCH-UX-001:
+    grid_rows: 100000
+    detail_tile_interactive_required: true
+    editable_tile_command_only_required: true
+  BENCH-UX-002:
+    focus_switch_p95_ms: 50
+    keyboard_navigation_required: true
+  BENCH-UX-003:
+    subscription_manifest_max_bytes: 65536
+    outbox_poll_regression_allowed: false
+  BENCH-INTEGRATION-008:
+    target: integration staging validation gates before command proposal
+    max_p95_ms: 250
+    dataset: pilot-v1-small + negative quarantine fixture
+  BENCH-EXEC-001:
+    agent_pr_handoff_required: true
+    validate_pack_required: true
+    one_work_order_per_pr_default: true
+    post_mvp_runtime_in_phase0_allowed: false
+    snapshot_first_read_required: true
+    skeletons_required_for_core_boundaries: true
+    agent_simulation_bad_pr_rejection_required: true
+    waiver_log_required_for_non_release_blocker_warnings: true
+    agent_process_required: true
+    validation_required: true
+  BENCH-EXEC-002:
+    agent_simulation_rejection_p95_ms: 500
+    rejection_accuracy_percent: 100
+    simulations_total: 7
+    false_negatives_allowed: 0
+    evidence_output_required: repo://docs/qa/agent-simulation-run-v0.16.1.md
+    target: agent simulation rejection loop
+    snapshot_authority_map_first_required: true
+    agent_pr_handoff_example_count_min: 2
+    agent_simulation_output_artifact_required: true
+  BENCH-SNAP-001:
+    snapshot_first_read_check_p95_ms: 50
+    authority_diagram_required: true
+    agent_no_go_checklist_required: true
+    readme_start_here_required: true
+    pack_index_start_here_required: true
+  BENCH-REPO-001:
+    target: repo-structure-validation-green
+    dataset: project-skeleton-v0.16.1
+  BENCH-REPO-002:
+    smoke_typecheck_required: true
+    tsconfig: tsconfig.smoke.json
+    command: bash scripts/smoke-typecheck.sh
+    generated_artifacts_allowed: false
+  BENCH-REPO-SMOKE-001:
+    target: repository smoke typecheck passes
+    command: bash scripts/smoke-typecheck.sh
+    max_p95_s: 5
+    generated_dist_allowed: false
+    source_declaration_files_allowed: false
+    tsbuildinfo_allowed: false
+  BENCH-SNAP-003:
+    target: snapshot includes repository tree visual and required smoke commands
+    snapshot_repository_tree_required: true
+    validate_and_smoke_commands_required: true
+  BENCH-REPO-003:
+    package_smoke_tests_required: true
+    command: bash scripts/smoke-package-tests.sh
+    max_p95_s: 5
+    workspace_packages: 9
+  BENCH-BOOTSTRAP-001:
+    bootstrap_completion_evidence_required: true
+    validate_pack_required: true
+    smoke_typecheck_required: true
+    package_smoke_tests_required: true

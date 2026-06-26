@@ -1,0 +1,23 @@
+{
+  "fixture": "inventory-positive",
+  "rows": [
+    {
+      "rowId": "r1",
+      "productId": "p1",
+      "warehouseId": "w1",
+      "quantity": 5
+    },
+    {
+      "rowId": "r2",
+      "productId": "p1",
+      "warehouseId": "w1",
+      "quantity": 3
+    }
+  ],
+  "expectedPartitions": [
+    [
+      "r1",
+      "r2"
+    ]
+  ]
+}

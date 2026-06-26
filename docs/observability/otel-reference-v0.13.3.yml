@@ -1,0 +1,23 @@
+version: 0.13.3
+last_reviewed: '2026-06-26'
+status: implementation_reference
+metrics:
+  - name: erp_command_transaction_boundary_rollback_total
+    type: counter
+    alert: any_nonzero_unclassified_rollback
+  - name: erp_retrieval_revalidator_bypass_total
+    type: counter
+    alert: any_nonzero
+  - name: erp_retrieval_revalidator_warm_cache_seconds
+    type: histogram
+    alert: p95_over_10ms
+  - name: ledger_shadow_mismatch_count
+    type: counter
+    alert: any_nonzero_after_warmup
+spans:
+  - name: erp.command.execute
+    required_attributes: [trace_id, correlation_id, command_id, tenant_id_hash, command_type]
+  - name: erp.retrieval.revalidate
+    required_attributes: [retrieval_mode, candidate_count, returned_count, duration_ms]
+  - name: erp.ledger.shadow_post
+    required_attributes: [ledger_code, movement_kind, result_class, duration_ms]

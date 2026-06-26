@@ -1,0 +1,1115 @@
+version: 0.16.1
+last_reviewed: '2026-06-26'
+invariants:
+- id: AC-001
+  title: Tenant isolation on operational reads
+  category: access_control
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/security/tenant-isolation-read
+  owner: Security Owner
+  appliesTo:
+  - api
+  - query_compiler
+  - rls
+- id: AC-002
+  title: Tenant isolation on writes
+  category: access_control
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/security/tenant-isolation-write
+  owner: Security Owner
+  appliesTo:
+  - api
+  - command_executor
+  - rls
+- id: CMD-001
+  title: Committed commands are idempotent and recoverable after response loss
+  category: command_integrity
+  severity: release_blocker
+  checkType: e2e_test
+  evidenceUri: ci://tests/e2e/TC-CMD-001-network-loss-after-commit
+  owner: API/Client Owner
+  appliesTo:
+  - command_log
+  - api
+  - client_retry
+- id: LIVE-001
+  title: Live updates are delivered from durable outbox events
+  category: live_update
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/live-update/outbox-polling-replay
+  owner: Platform/SRE Owner
+  appliesTo:
+  - outbox_events
+  - sse
+  - polling_reader
+- id: BATCH-001
+  title: Transactional batch never commits across unvalidated dependency boundaries
+  category: data_integrity
+  severity: release_blocker
+  checkType: fuzz_test
+  evidenceUri: ci://tests/fuzz/batch-partitioner
+  owner: Backend/Domain Model Owner
+  appliesTo:
+  - bulk_edit
+  - batch_partitioner
+  - workbook_definition
+- id: FORM-004
+  title: Formula cannot reference unauthorized source fields
+  category: formula_security
+  severity: release_blocker
+  checkType: fuzz_test
+  evidenceUri: ci://tests/fuzz/formula-unauthorized-reference
+  owner: Formula Owner
+  appliesTo:
+  - formula_parser
+  - formula_evaluator
+  - permission_engine
+- id: RATE-001
+  title: Ordinary edit rate limiting does not write PostgreSQL counters synchronously
+  category: performance_security
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/rate-limit/no-pg-counter-write-on-edit-hot-path
+  owner: Platform/API Owner
+  appliesTo:
+  - rate_limiter
+  - api
+- id: AUD-001
+  title: Every committed mutation has command, audit, domain event, and outbox correlation
+  category: auditability
+  severity: release_blocker
+  checkType: sql_invariant
+  evidenceUri: repo://invariants/sql/aud-001-command-audit-domain-outbox-correlation.sql
+  owner: Audit Owner
+  appliesTo:
+  - command_log
+  - audit_events
+  - domain_events
+  - outbox_events
+- id: OBS-001
+  title: Command trace and correlation IDs span command, audit, domain, outbox, and SSE delivery
+  category: observability
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/observability/trace-correlation-command-outbox-sse
+  owner: SRE Owner
+  appliesTo:
+  - api
+  - command_log
+  - audit_events
+  - domain_events
+  - outbox_events
+  - sse
+- id: COMP-001
+  title: Regulated pilot data is blocked until compliance sign-off exists
+  category: compliance
+  severity: release_blocker
+  checkType: policy_test
+  evidenceUri: ci://tests/compliance/regulated-data-pilot-block
+  owner: Compliance Owner
+  appliesTo:
+  - workbook_definition
+  - field_classification
+  - import_pipeline
+- id: SLO-001
+  title: Phase 0 release gates reference quantified SLO targets
+  category: release_governance
+  severity: release_blocker
+  checkType: manifest_test
+  evidenceUri: ci://tests/governance/gates-reference-slo-baseline
+  owner: Engineering Lead
+  appliesTo:
+  - docs/gates
+  - docs/slo-baseline.yml
+  - tests/manifest.yml
+- id: PRIV-001
+  title: Command log stores no raw request body and only redacted or encrypted response data
+  category: privacy
+  severity: release_blocker
+  checkType: security_test
+  evidenceUri: ci://tests/security/command-log-redaction
+  owner: Security Owner
+  appliesTo:
+  - command_log
+  - api
+  - support_diagnostics
+- id: RET-001
+  title: Retention and partitioning preserve command recovery and outbox replay semantics
+  category: data_lifecycle
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/data/outbox-retention-gap-forces-full-refresh
+  owner: SRE Owner
+  appliesTo:
+  - command_log
+  - outbox_events
+  - retention_jobs
+- id: SYNC-001
+  title: SSE subscribers receive snapshot or replay before being marked live
+  category: live_update
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/live-update/sse-subscription-handshake
+  owner: Platform/SRE Owner
+  appliesTo:
+  - sse
+  - outbox_events
+  - polling_reader
+  - client_sync
+- id: CLIENT-001
+  title: Optimistic edits remain pending until server-confirmed and conflict-aware
+  category: client_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/client/optimistic-ui-conflict-resolution
+  owner: Frontend Owner
+  appliesTo:
+  - grid_client
+  - command_status
+  - sse
+- id: DATA-001
+  title: Command and outbox schemas preserve idempotency and replay semantics
+  category: data_lifecycle
+  severity: release_blocker
+  checkType: schema_test
+  evidenceUri: ci://tests/data/outbox-schema-index-contract
+  owner: SRE Owner
+  appliesTo:
+  - command_log
+  - outbox_events
+  - migrations
+- id: LEDGER-001
+  title: Conserved numeric movement uses append-only NumericLedgerPort transfers
+  category: numeric_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ledger/no-direct-balance-update
+  owner: Domain Ledger Owner
+  appliesTo:
+  - NumericLedgerPort
+  - numeric_transfers
+  - financial_commands
+  - stock_commands
+- id: LEDGER-002
+  title: Numeric balance projections are rebuildable and not authoritative
+  category: numeric_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ledger/projection-rebuild-from-transfers
+  owner: Domain Ledger Owner
+  appliesTo:
+  - numeric_balance_projection
+  - numeric_transfers
+  - reconciliation_jobs
+- id: LEDGER-003
+  title: TigerBeetle migration preserves deterministic IDs and reconciliation before cutover
+  category: migration_safety
+  severity: release_blocker
+  checkType: gate_evidence
+  evidenceUri: ci://reports/reconciliation/ledger-shadow-mode
+  owner: Domain Ledger Owner
+  appliesTo:
+  - TigerBeetleNumericLedgerAdapter
+  - numeric_ledger_migration_state
+  - P1-LEDGER-001
+- id: LEDGER-004
+  title: TigerBeetle field assignment is versioned and mirrored in PostgreSQL
+  category: numeric_integrity
+  severity: release_blocker
+  checkType: schema_test
+  evidenceUri: ci://tests/ledger/field-assignment-policy-registry-valid
+  owner: Domain Ledger Owner
+  appliesTo:
+  - tb_field_assignment_policy
+  - tb_ledger_registry
+  - tb_account_registry
+  - tb_transfer_registry
+  - tb_code_registry
+  - P1-LEDGER-001
+- id: LEDGER-005
+  title: MVP numeric commands use only approved ledger codes
+  category: numeric_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ledger/mvp-command-uses-only-allowed-codes
+  owner: Domain Ledger Owner
+  appliesTo:
+  - tb_code_registry
+  - NumericLedgerPort
+  - PostgresMvpNumericLedgerAdapter
+- id: LEDGER-006
+  title: Ledger transfers enforce same-ledger and stock semantic compatibility
+  category: numeric_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ledger/same-ledger-debit-credit-enforcement
+  owner: Domain Ledger Owner
+  appliesTo:
+  - tb_transfer_registry
+  - numeric_transfers
+  - stock_commands
+  - tb_stock_status_transition_policy
+- id: SCHEMA-001
+  title: Canonical DDL exists only in approved data-contract files
+  category: release_governance
+  severity: release_blocker
+  checkType: manifest_test
+  evidenceUri: ci://tests/governance/no-duplicate-canonical-ddl
+  owner: Engineering Lead
+  appliesTo:
+  - docs/data/command-outbox-retention-partitioning.md
+  - docs/data/numeric-ledger-contract.md
+  - scripts/validate-pack.sh
+  - docs/data/analytics-export-contract.md
+- id: LEDGER-007
+  title: TigerBeetle user_data fields contain only compact non-PII pointers
+  category: privacy
+  severity: release_blocker
+  checkType: security_test
+  evidenceUri: ci://tests/security/tb-user-data-no-pii
+  owner: Security Owner
+  appliesTo:
+  - tb_account_registry
+  - tb_transfer_registry
+  - tb_field_assignment_policy
+- id: CHAOS-001
+  title: Command, outbox, and ledger recovery paths pass injected-failure tests
+  category: resilience
+  severity: release_blocker
+  checkType: chaos_test
+  evidenceUri: ci://tests/chaos/command-db-connection-kill-mid-transaction
+  owner: SRE Owner
+  appliesTo:
+  - command_log
+  - outbox_events
+  - NumericLedgerPort
+  - reconciliation_jobs
+- id: AI-001
+  title: AI retrieval never bypasses tenant and permission filters
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/tenant-permission-filtered-retrieval
+  owner: Security Owner
+  appliesTo:
+  - pgvector
+  - ai_chunks
+  - retrieval_api
+- id: AI-002
+  title: Embeddings are derived projections and not operational source of truth
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: schema_test
+  evidenceUri: ci://tests/ai/embeddings-derived-only
+  owner: Data Platform Owner
+  appliesTo:
+  - ai_sources
+  - ai_chunks
+  - ai_embeddings
+- id: AI-003
+  title: Regulated or blocked data is not embedded without compliance approval
+  category: ai_privacy
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/regulated-data-embedding-block
+  owner: Compliance Owner
+  appliesTo:
+  - embedding_worker
+  - data_classification
+- id: AI-004
+  title: AI suggestions cannot mutate data except through command handlers
+  category: command_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/suggestions-require-command
+  owner: API/Domain Owner
+  appliesTo:
+  - assistant_api
+  - command_log
+- id: ANALYTICS-001
+  title: DuckDB analytics use only approved derived artifacts or read-only projections
+  category: analytics_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/analytics/duckdb-permission-filtered-artifacts
+  owner: Data Platform Owner
+  appliesTo:
+  - duckdb_query_service
+  - analytics_artifacts
+- id: ANALYTICS-002
+  title: DuckDB cannot write operational PostgreSQL tables
+  category: analytics_safety
+  severity: release_blocker
+  checkType: security_test
+  evidenceUri: ci://tests/analytics/duckdb-no-operational-writeback
+  owner: SRE Owner
+  appliesTo:
+  - duckdb_query_service
+  - postgres_roles
+- id: ANALYTICS-003
+  title: Analytics artifacts expose source watermark and freshness metadata
+  category: data_lifecycle
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/analytics/duckdb-artifact-watermark-completeness
+  owner: Data Platform Owner
+  appliesTo:
+  - analytics_artifacts
+  - outbox_export_jobs
+- id: DATA-PLANE-001
+  title: Specialized post-MVP planes remain derived read planes and never bypass command/audit/ledger authority
+  category: architecture_governance
+  severity: release_blocker
+  checkType: manifest_test
+  evidenceUri: ci://tests/data-plane/no-specialized-plane-operational-write-path
+  owner: Engineering Lead
+  appliesTo:
+  - TigerBeetle
+  - pgvector
+  - DuckDB
+  - PostgreSQL
+- id: ANALYTICS-004
+  title: Analytics outputs are derived projections and not operational source of truth
+  category: data_lifecycle
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/analytics/duckdb-result-derived-only
+  owner: Data Platform Owner
+  appliesTo:
+  - analytics_query_jobs
+  - analytics_snapshot_manifest
+  - command_handlers
+- id: SYNERGY-001
+  title: Specialized planes interoperate only through PostgreSQL contracts and projection lineage
+  category: architecture_governance
+  severity: release_blocker
+  checkType: manifest_test
+  evidenceUri: ci://tests/analytics/multi-plane-query-requires-deterministic-output
+  owner: Engineering Lead
+  appliesTo:
+  - PostgreSQL
+  - TigerBeetle
+  - pgvector
+  - DuckDB
+  - outbox_events
+- id: SYNERGY-002
+  title: Cross-plane payloads carry tenant, permission, schema, classification, and lineage metadata
+  category: architecture_governance
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/synergy/cross-plane-envelope-complete
+  owner: Engineering Lead
+  appliesTo:
+  - PostgreSQL
+  - TigerBeetle
+  - pgvector
+  - DuckDB
+  - formula_workers
+  - outbox_events
+- id: SYNERGY-003
+  title: Specialized plane failure degrades features without corrupting operational state
+  category: resilience
+  severity: release_blocker
+  checkType: chaos_test
+  evidenceUri: ci://tests/synergy/specialized-plane-failure-degrades-safely
+  owner: SRE Owner
+  appliesTo:
+  - TigerBeetle
+  - pgvector
+  - DuckDB
+  - formula_workers
+  - SSE
+- id: SYNERGY-004
+  title: Cross-plane AI or analytics answers run RetrievalRevalidator and cite deterministic records before display
+  category: command_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/synergy/retrieval-revalidator-runs-before-cross-plane-answer
+  owner: Security Owner
+  appliesTo:
+  - retrieval_api
+  - pgvector
+  - command_handlers
+  - DuckDBAnalyticsWorker
+  - RetrievalRevalidator
+  - assistant_api
+- id: AI-005
+  title: pgvector embeddings use derived chunk tables and never core operational vector columns
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: schema_test
+  evidenceUri: ci://tests/ai/no-vector-columns-in-core-operational-tables
+  owner: Data Platform Owner
+  appliesTo:
+  - ai_source_registry
+  - ai_chunk_registry
+  - ai_embeddings_*
+  - core_erp_tables
+- id: AI-006
+  title: Hybrid retrieval uses RetrievalRevalidator before user-visible results
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/retrieval-revalidator-required
+  owner: Data Platform Owner
+  appliesTo:
+  - retrieval_api
+  - ai_chunk_registry
+  - docs/dev/retrieval-revalidator.md
+  - RetrievalRevalidator
+  - tsvector
+  - pgvector
+- id: AI-007
+  title: ANN indexes require recall, filtering, and source-revalidation evidence before rollout
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: benchmark_gate
+  evidenceUri: ci://tests/ai/ann-filtering-recall-gate
+  owner: Data Platform Owner + SRE Owner
+  appliesTo:
+  - pgvector
+  - HNSW
+  - IVFFlat
+  - retrieval_api
+- id: AI-008
+  title: DuckDB-derived AI chunks enter pgvector only through the governed semantic retrieval contract
+  category: cross_plane_governance
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/duckdb-derived-chunks-enter-through-registry
+  owner: Data Platform Owner
+  appliesTo:
+  - DuckDBAnalyticsWorker
+  - ai_source_registry
+  - ai_chunk_registry
+  - analytics_snapshot_manifest
+- id: OUTBOX-001
+  title: PostgreSQL outbox remains authoritative for event replay and derived-plane scheduling
+  category: event_delivery
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/outbox/postgres-outbox-authoritative-source
+  owner: Platform/SRE Owner
+  appliesTo:
+  - outbox_events
+  - outbox_dispatcher
+  - cdc_bridge
+  - broker
+- id: OUTBOX-002
+  title: Every outbox event has stable envelope identity, schema, routing, and payload hash
+  category: event_contract
+  severity: release_blocker
+  checkType: schema_test
+  evidenceUri: ci://tests/outbox/event-envelope-contract
+  owner: Platform/SRE Owner
+  appliesTo:
+  - outbox_events
+  - event_schema_registry
+- id: OUTBOX-003
+  title: Outbox consumers are checkpointed and idempotent
+  category: event_delivery
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/outbox/consumer-checkpoint-idempotency
+  owner: Platform/SRE Owner
+  appliesTo:
+  - outbox_consumer_checkpoints
+  - outbox_dispatch_attempts
+  - derived_plane_consumers
+- id: OUTBOX-004
+  title: CDC and broker adoption cannot block command commits
+  category: command_safety
+  severity: release_blocker
+  checkType: chaos_test
+  evidenceUri: ci://tests/outbox/broker-outage-does-not-block-command-commit
+  owner: SRE Owner
+  appliesTo:
+  - command_handlers
+  - outbox_events
+  - cdc_bridge
+  - broker
+- id: OUTBOX-005
+  title: Derived planes consume only governed outbox envelopes or derived manifests
+  category: cross_plane_governance
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/outbox/derived-plane-job-replay
+  owner: Data Platform Owner
+  appliesTo:
+  - pgvector
+  - DuckDBAnalyticsWorker
+  - TigerBeetleProjectionRepair
+  - outbox_events
+- id: OUTBOX-006
+  title: Regulated outbox payloads cannot route to unauthorized sinks
+  category: privacy
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/outbox/regulated-payload-routing-blocked
+  owner: Security Owner + Compliance Owner
+  appliesTo:
+  - outbox_events
+  - payload_ref
+  - integration_sinks
+  - broker
+- id: LEDGER-008
+  title: Ledger ID derivation and payload hash parity hold across adapters
+  category: ledger_integrity
+  severity: release_blocker
+  checkType: property_test
+  evidenceUri: ci://tests/ledger/id-derivation-cross-adapter-parity
+  owner: Backend/API Owner + Data Platform Owner
+  appliesTo:
+  - docs/data/ledger-id-derivation-reference.md
+  - PostgresMvpNumericLedgerAdapter
+  - TigerBeetleShadowAdapter
+  - transfer_payload_hash
+- id: OUTBOX-007
+  title: Outbox polling reader performance is protected from envelope bloat
+  category: live_update
+  severity: release_blocker
+  checkType: benchmark_gate
+  evidenceUri: ci://benchmarks/BENCH-LIVE-OUTBOX-POLL-001
+  owner: Platform/SRE Owner
+  appliesTo:
+  - outbox_events
+  - polling_reader
+  - sse
+  - docs/data/outbox-polling-performance-contract.md
+- id: AI-009
+  title: AI or analytics retrieval candidates are revalidated against current source visibility and classification
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/retrieval-revalidator-filters-stale-source
+  owner: Security Owner + Data Platform Owner
+  appliesTo:
+  - RetrievalRevalidator
+  - ai_source_registry
+  - ai_chunk_registry
+  - analytics_snapshot_manifest
+  - permission_compiler
+- id: CMD-005
+  title: MVP command transaction boundary is atomic across current state, ledger port, audit, domain events, outbox, and terminal status
+  category: command_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/command/transaction-boundary-atomic-current-audit-domain-outbox
+  owner: API/Domain Owner
+  appliesTo:
+  - command_log
+  - NumericLedgerPort
+  - audit_events
+  - domain_events
+  - outbox_events
+- id: AI-010
+  title: RetrievalRevalidator cache keys include permission scope, source version, classification, and redaction policy
+  category: ai_retrieval
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ai/retrieval-revalidator-cache-key-includes-permission-scope
+  owner: Security Owner
+  appliesTo:
+  - RetrievalRevalidator
+  - retrieval_api
+  - ai_chunks
+- id: OBS-002
+  title: Phase 0 reference OpenTelemetry spans and metrics are implemented for command, outbox, ledger shadow, and retrieval paths
+  category: observability
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/observability/otel-reference-conventions
+  owner: SRE Owner
+  appliesTo:
+  - api
+  - outbox_reader
+  - NumericLedgerPort
+  - RetrievalRevalidator
+- id: LEDGER-009
+  title: TigerBeetle shadow mode cannot cut over with mismatches or unbounded command-path latency
+  category: migration_safety
+  severity: release_blocker
+  checkType: runbook_drill
+  evidenceUri: ci://tests/ledger/shadow-day-in-life-runbook-drill
+  owner: Domain Ledger Owner
+  appliesTo:
+  - TigerBeetleNumericLedgerAdapter
+  - shadow_worker
+  - reconciliation_jobs
+- id: CMD-004
+  title: Command business transaction boundary includes domain, audit, outbox, terminal command status, and MVP NumericLedgerPort writes
+  category: command_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/api/command-transaction-boundary-savepoints
+  owner: API/Client Owner + Backend/Domain Owner
+  appliesTo:
+  - command_log
+  - domain_handlers
+  - audit_events
+  - domain_events
+  - outbox_events
+  - NumericLedgerPort
+- id: EXT-001
+  title: Inbound external data mutates ERP state only through command handlers
+  category: integration_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/inbound-staging-command-proposal
+  owner: API/Domain Owner + Security Owner
+  appliesTo:
+  - ExternalIntegrationAdapter
+  - integration_import_staging
+  - command_log
+- id: EXT-002
+  title: Outbound external delivery originates from durable outbox events only
+  category: integration_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/outbound-outbox-delivery-idempotent
+  owner: Platform/SRE Owner
+  appliesTo:
+  - outbox_events
+  - integration_delivery_attempts
+  - ExternalIntegrationAdapter
+- id: EXT-003
+  title: External object identity is mapped through a versioned mapping registry
+  category: integration_consistency
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/external-object-mapping-reconciliation
+  owner: Data Platform Owner
+  appliesTo:
+  - external_object_mappings
+- id: EXT-004
+  title: Integration operations are idempotent and payload-hash checked
+  category: integration_integrity
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/inbound-idempotency-conflict
+  owner: API/Platform Owner
+  appliesTo:
+  - integration_import_staging
+  - integration_delivery_attempts
+- id: EXT-005
+  title: Connector outages never block command commit after outbox durability
+  category: resilience
+  severity: release_blocker
+  checkType: chaos_test
+  evidenceUri: ci://tests/integration/connector-outage-does-not-block-command-commit
+  owner: SRE Owner
+  appliesTo:
+  - command_log
+  - outbox_events
+  - integration_dispatcher
+- id: EXT-006
+  title: Regulated data cannot be sent to unapproved integration sinks
+  category: privacy
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/regulated-sink-blocked
+  owner: Security Owner + Compliance Owner
+  appliesTo:
+  - integration_connections
+  - payload_ref
+  - outbox_events
+- id: EXT-007
+  title: External integration data entering pgvector, DuckDB, or TigerBeetle uses governed projections/events
+  category: system_synergy
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/synergy/integration-data-to-pgvector-requires-revalidator
+  owner: Data Platform Owner
+  appliesTo:
+  - pgvector
+  - DuckDBAnalyticsWorker
+  - NumericLedgerPort
+  - RetrievalRevalidator
+- id: EXT-008
+  title: Integration credentials are referenced, scoped, and audited; secret material is never stored in plain metadata
+  category: credential_safety
+  severity: release_blocker
+  checkType: security_test
+  evidenceUri: ci://tests/security/integration-credential-ref-no-secret-material
+  owner: Security Owner
+  appliesTo:
+  - integration_connections
+  - credential_ref
+  - audit_events
+- id: EXT-009
+  title: Inbound integration payloads are scanned, size/content-type checked, schema-validated, and classified before command proposal
+  category: integration_security
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/inbound-payload-scan-schema-validated-before-command-proposal
+  owner: Security Owner + API/Platform Owner
+  appliesTo:
+  - integration_import_staging
+  - integration_payload_schema_registry
+  - ExternalIntegrationAdapter
+- id: EXT-010
+  title: Integration service accounts and credentials are least-privilege, KMS-backed, rotated, revocable, and audited
+  category: credential_safety
+  severity: release_blocker
+  checkType: security_test
+  evidenceUri: ci://tests/security/integration-credential-rotation-overlap-window
+  owner: Security Owner
+  appliesTo:
+  - integration_service_accounts
+  - integration_connections
+  - credential_ref
+- id: UI-001
+  title: All editable tiles mutate only through command handlers
+  category: ui_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/grid-and-transpose-same-command
+  owner: Frontend Owner + API Owner
+  appliesTo:
+  - grid
+  - transposed_record_tile
+  - command_api
+- id: UI-002
+  title: Transposed views preserve canonical field identity and permissions
+  category: ui_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/transposed-view-field-identity-permissions
+  owner: Frontend Owner + Security Owner
+  appliesTo:
+  - transposed_record_tile
+  - field_policy
+- id: UI-003
+  title: Tile subscriptions are declared and deduplicated before outbox polling
+  category: live_update
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/tile-subscription-dedup
+  owner: Frontend Owner + Platform/SRE Owner
+  appliesTo:
+  - workspace_subscription_manifest
+  - outbox_polling_reader
+- id: UI-004
+  title: Derived-plane tiles cannot display unrevalidated results
+  category: derived_plane_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/derived-plane-tile-revalidation
+  owner: Security Owner + Data Platform Owner
+  appliesTo:
+  - RetrievalRevalidator
+  - pgvector
+  - DuckDB
+  - integration_status_tile
+- id: UI-005
+  title: Layout state cannot change business state
+  category: ui_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/workspace-layout-state-not-domain-state
+  owner: Frontend Owner
+  appliesTo:
+  - workspace_layout
+  - command_api
+- id: UI-006
+  title: Command status is visible for pending, failed, and ambiguous tile edits
+  category: command_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/command-status-visible-in-tiles
+  owner: Frontend Owner + API Owner
+  appliesTo:
+  - command_status_tile
+  - editable_tiles
+- id: EXT-011
+  title: Integration staging cannot create command proposals before validation gates pass
+  category: external_integration
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/integration/staging-validation-gates-before-command-proposal
+  owner: Security Owner
+  appliesTo:
+  - integration_import_staging
+  - external_integration_adapter
+  - command_proposal
+- id: UI-007
+  title: Tiled workspace work is gated until the Phase 0 vertical slice is green
+  category: ui
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/ui/p1-ux-starts-only-after-vertical-slice-green
+  owner: Product Owner
+  appliesTo:
+  - P1-UX-001
+  - vertical_slice
+- id: EXEC-001
+  title: AI coding agents follow the active AGENTS.md execution boundaries
+  category: implementation_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/agent-roadmap-present
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - AGENTS.md
+  - docs/implementation
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: EXEC-002
+  title: Agent work orders preserve locked P0 gate order
+  category: implementation_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/no-agent-work-order-bypasses-p0-order
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - AGENTS.md
+  - docs/implementation
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: EXEC-003
+  title: Agent PRs run validation and include handoff evidence
+  category: implementation_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/agent-handoff-includes-validation-output
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - AGENTS.md
+  - docs/implementation
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: EXEC-004
+  title: Agent work orders do not introduce post-MVP runtimes into the Phase 0 edit path
+  category: implementation_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/no-post-mvp-plane-in-phase0-edit-path
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - AGENTS.md
+  - docs/implementation
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: EXEC-005
+  title: Agent work orders map implementation steps to manifest evidence URIs
+  category: implementation_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/agent-work-orders-have-evidence
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - AGENTS.md
+  - docs/implementation
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: EXEC-006
+  title: Post-MVP scaffolding created by agents is feature-flagged off by default
+  category: implementation_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/post-mvp-scaffolding-feature-flagged-off
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - AGENTS.md
+  - docs/implementation
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: SNAP-001
+  title: One-page architecture snapshot is current and first-read
+  category: execution_governance
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/snapshot-first-read-present
+  owner: Engineering Lead
+  appliesTo:
+  - docs/snapshot-v0.16.1.md
+  - README.md
+  - docs/pack-index.md
+  - P0-EXEC-001
+- id: UI-008
+  title: Tiles and transposed views cannot mutate outside command_api before P1-UX-001
+  category: ui_safety
+  severity: release_blocker
+  checkType: integration_test
+  evidenceUri: ci://tests/ui/no-tile-transpose-mutation-before-p1-ux
+  owner: Frontend Owner
+  appliesTo:
+  - ui
+  - command_api
+  - docs/ui/transposed-record-view-contract.md
+- id: EXEC-007
+  title: Agent implementation starts from snapshot and skeletons where applicable
+  category: execution_governance
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/skeletons-present-for-core-boundaries
+  owner: Engineering Lead
+  appliesTo:
+  - AGENTS.md
+  - docs/skeletons
+  - docs/implementation/phase0-agent-work-orders.md
+- id: EXEC-008
+  title: Validation waivers require explicit non-release-blocking waiver log entry
+  category: execution_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/validation-waiver-requires-log-entry
+  owner: QA Owner
+  appliesTo:
+  - scripts/validate-pack.sh
+  - docs/process/decision-waiver-log.md
+- id: SNAP-002
+  title: README and pack-index start with the architecture snapshot entrypoint
+  category: execution_governance
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/snapshot-start-here-banner-in-readme-and-index
+  owner: Engineering Lead
+  appliesTo:
+  - README.md
+  - docs/pack-index.md
+  - docs/snapshot-v0.16.1.md
+- id: EXEC-009
+  title: Agent simulation output is attached and rejects unsafe PR patterns
+  category: execution_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/agent-simulation-output-attached
+  owner: QA Owner
+  appliesTo:
+  - docs/qa/agent-simulation-test.md
+  - docs/qa/agent-simulation-run-v0.16.1.md
+  - scripts/validate-pack.sh
+- id: EXEC-010
+  title: Agent PR handoff examples include accepted and rejected diff-style examples
+  category: execution_governance
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/agent-pr-handoff-examples-present
+  owner: Engineering Lead + QA Owner
+  appliesTo:
+  - docs/implementation/agent-pr-validation-playbook.md
+  - docs/implementation/pr-handoff-examples.md
+- id: EXEC-011
+  title: Repository structure and source stubs match the Phase 0 project contract
+  category: execution_governance
+  severity: release_blocker
+  checkType: repository_structure_test
+  evidenceUri: ci://tests/process/repo-structure-present
+  owner: Engineering Owner
+  appliesTo:
+  - apps
+  - packages
+  - docs/implementation/project-directory-structure.md
+- id: EXEC-012
+  title: Scoped agent instruction files exist for implementation-critical directories
+  category: execution_governance
+  severity: release_blocker
+  checkType: repository_structure_test
+  evidenceUri: ci://tests/process/scoped-agent-instructions-present
+  owner: Engineering Owner
+  appliesTo:
+  - AGENTS.md
+  - apps/AGENTS.md
+  - packages/AGENTS.md
+  - docs/AGENTS.md
+  - tests/AGENTS.md
+- id: DOC-001
+  title: Historical documentation and release artifacts live under docs/archive unless active
+  category: documentation_governance
+  severity: ticket
+  checkType: repository_structure_test
+  evidenceUri: ci://tests/process/docs-archive-layout-present
+  owner: Documentation Owner
+  appliesTo:
+  - docs/archive
+  - CHANGELOG.md
+- id: SNAP-003
+  title: Architecture snapshot includes repository tree visual
+  category: execution_governance
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/snapshot-repository-tree-visible
+  owner: Engineering Lead
+  appliesTo:
+  - docs/snapshot-v0.16.1.md
+- id: EXEC-013
+  title: Repository stubs pass bootstrap smoke typecheck
+  category: execution_governance
+  severity: release_blocker
+  checkType: repository_smoke_test
+  evidenceUri: ci://tests/process/repo-smoke-typecheck-passes
+  owner: Engineering Owner
+  appliesTo:
+  - scripts/smoke-typecheck.sh
+  - tsconfig.smoke.json
+  - apps
+  - packages
+- id: EXEC-014
+  title: Active entrypoints contain no stale prior-version references
+  category: execution_governance
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/no-stale-active-v0153-references
+  owner: Documentation Owner
+  appliesTo:
+  - README.md
+  - AGENTS.md
+  - docs/pack-index.md
+  - scripts/validate-pack.sh
+  - tests/manifest.yml
+- id: DOC-002
+  title: Active entrypoints do not retain stale prior-version references
+  category: documentation_hygiene
+  severity: release_blocker
+  checkType: doc_test
+  evidenceUri: ci://tests/process/no-stale-active-v0153-references
+  owner: QA Owner
+  appliesTo:
+  - README.md
+  - AGENTS.md
+  - docs/pack-index.md
+  - tests/manifest.yml
+  - scripts/validate-pack.sh
+- id: EXEC-015
+  title: Package smoke tests run for every workspace package
+  category: execution_governance
+  severity: release_blocker
+  checkType: process_test
+  evidenceUri: ci://tests/process/package-smoke-tests-pass
+  owner: QA Owner
+  appliesTo:
+  - scripts/smoke-package-tests.sh
+  - apps
+  - packages
+- id: EXEC-016
+  title: Bootstrap completion evidence is attached before feature work starts
+  category: execution_governance
+  severity: release_blocker
+  checkType: documentation_test
+  evidenceUri: ci://tests/process/bootstrap-completion-evidence-attached
+  owner: Engineering Lead
+  appliesTo:
+  - docs/qa/bootstrap-completion-evidence-v0.16.1.md
+  - docs/snapshot-v0.16.1.md
+- id: SNAP-004
+  title: Snapshot declares bootstrap achieved and next work-order path
+  category: execution_governance
+  severity: release_blocker
+  checkType: documentation_test
+  evidenceUri: ci://tests/docs/snapshot-bootstrap-achieved-note
+  owner: Engineering Lead
+  appliesTo:
+  - docs/snapshot-v0.16.1.md
+- id: DOC-003
+  title: Vertical-slice release note template exists before implementation handoff
+  category: documentation_hygiene
+  severity: ticket
+  checkType: documentation_test
+  evidenceUri: ci://tests/docs/vertical-slice-release-note-template-present
+  owner: Product/Engineering
+  appliesTo:
+  - docs/release/vertical-slice-release-note-template.md

@@ -1,0 +1,109 @@
+openapi: "3.1.0"
+info:
+  title: "Spreadsheet-Native ERP Command Status API"
+  version: "0.13.2"
+paths:
+  /api/v1/commands:
+    post:
+      summary: "Submit a mutation command"
+      operationId: "submitCommand"
+      parameters:
+        - name: "Idempotency-Key"
+          in: "header"
+          required: true
+          schema: { type: "string", format: "uuid" }
+        - name: "X-Correlation-Id"
+          in: "header"
+          required: false
+          schema: { type: "string", minLength: 8 }
+      responses:
+        "200":
+          description: "Command committed or replayed with identical request hash"
+        "202":
+          description: "Matching command is pending; no duplicate mutation executed"
+          headers:
+            Retry-After:
+              schema: { type: "integer" }
+        "409":
+          description: "COMMAND_ID_REUSE_CONFLICT or COMMAND_AMBIGUOUS"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/commands/{commandId}:
+    get:
+      summary: "Get command status after response loss or timeout"
+      operationId: "getCommandStatus"
+      parameters:
+        - name: "commandId"
+          in: "path"
+          required: true
+          schema: { type: "string", format: "uuid" }
+        - name: "X-Correlation-Id"
+          in: "header"
+          required: false
+          schema: { type: "string" }
+      responses:
+        "200":
+          description: "Resolved command status"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandStatus"
+        "202":
+          description: "Matching command is still pending"
+          headers:
+            Retry-After:
+              schema: { type: "integer" }
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: "Unknown or expired command; client must refresh before retry"
+components:
+  schemas:
+    CommandStatus:
+      type: "object"
+      required: ["commandId", "status", "traceId", "correlationId"]
+      properties:
+        commandId: { type: "string", format: "uuid" }
+        traceId:
+          type: "string"
+          description: "OpenTelemetry trace ID or local fallback; not UUID-only"
+        correlationId: { type: "string" }
+        status:
+          type: "string"
+          enum: ["received", "committed", "rejected", "failed", "ambiguous"]
+        responseBodyRedacted:
+          type: ["object", "null"]
+        responseRef:
+          type: ["string", "null"]
+        errorCode:
+          type: ["string", "null"]
+        committedAt:
+          type: ["string", "null"]
+          format: "date-time"
+        expiresAt:
+          type: "string"
+          format: "date-time"
+    Problem:
+      type: "object"
+      required: ["type", "title", "status", "errorCode"]
+      properties:
+        type: { type: "string" }
+        title: { type: "string" }
+        status: { type: "integer" }
+        errorCode: { type: "string" }
+        detail: { type: "string" }
+        code: { type: "string" }
+        traceId: { type: "string" }
+        correlationId: { type: "string" }
+  responses:
+    RateLimited:
+      description: "Rate limited"
+      headers:
+        Retry-After:
+          schema: { type: "integer" }
+        RateLimit:
+          schema: { type: "string" }
+        RateLimit-Policy:
+          schema: { type: "string" }

@@ -1,0 +1,27 @@
+name: validate-pack
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate-pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install validation dependencies
+        run: python -m pip install pyyaml
+      - name: Validate architecture pack and project skeleton
+        run: bash scripts/validate-pack.sh
+      - name: Install TypeScript for smoke typecheck
+        run: npm install -g typescript
+      - name: Smoke typecheck
+        run: bash scripts/smoke-typecheck.sh
+          bash scripts/smoke-package-tests.sh

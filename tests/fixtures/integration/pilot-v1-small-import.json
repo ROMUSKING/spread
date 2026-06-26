@@ -1,0 +1,33 @@
+{
+  "fixture": "pilot-v1-small-external-import",
+  "version": "0.14.3",
+  "connection": {
+    "providerKey": "synthetic-webhook",
+    "connectionType": "webhook",
+    "maxPayloadBytes": 10485760,
+    "allowedContentTypes": [
+      "application/json"
+    ]
+  },
+  "payloads": [
+    {
+      "externalOperationId": "op-001",
+      "idempotencyKey": "idem-001",
+      "objectType": "customer",
+      "schemaKey": "customer-upsert",
+      "schemaVersion": 1,
+      "payload": {
+        "externalCustomerId": "ext-c-001",
+        "displayName": "ACME Ltd"
+      }
+    }
+  ],
+  "negativeCases": [
+    "same idempotency key different payload hash",
+    "oversized payload",
+    "invalid content type",
+    "quarantined malware scan",
+    "invalid schema",
+    "revoked credential"
+  ]
+}

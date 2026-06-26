@@ -1,0 +1,609 @@
+version: 0.16.1
+last_reviewed: '2026-06-26'
+sloReference: repo://docs/slo-baseline.yml
+gates:
+- id: P0-EXEC-001
+  gateCard: repo://docs/gates/P0-EXEC-001-ai-agent-implementation-readiness.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-EXEC-001
+  ciJobs:
+  - ci://tests/process/agent-roadmap-present
+  - ci://tests/process/agent-work-orders-have-evidence
+  - ci://tests/process/agent-validation-command-present
+  - ci://tests/process/agent-pr-template-present
+  - ci://tests/process/no-agent-work-order-bypasses-p0-order
+  - ci://tests/process/no-post-mvp-plane-in-phase0-edit-path
+  - ci://tests/process/post-mvp-scaffolding-feature-flagged-off
+  - ci://tests/process/agent-handoff-includes-validation-output
+  - ci://benchmarks/BENCH-EXEC-001
+  - ci://tests/process/snapshot-first-read-present
+  - ci://tests/process/skeletons-present-for-core-boundaries
+  - ci://tests/process/validation-waiver-requires-log-entry
+  - ci://tests/process/agent-simulation-direct-write-rejected
+  - ci://tests/process/agent-simulation-post-mvp-runtime-rejected
+  - ci://tests/process/agent-simulation-command-without-outbox-rejected
+  - ci://tests/process/agent-simulation-revalidator-bypass-rejected
+  - ci://tests/process/agent-simulation-tile-command-bypass-rejected
+  - ci://tests/process/agent-simulation-ddl-centralization-rejected
+  - ci://tests/process/agent-simulation-waiver-requires-log-entry
+  - ci://tests/docs/pack-snapshot-current
+  - ci://tests/ui/no-tile-transpose-mutation-before-p1-ux
+  - ci://tests/process/snapshot-start-here-banner-in-readme-and-index
+  - ci://tests/process/agent-pr-handoff-examples-present
+  - ci://tests/process/agent-simulation-output-attached
+  - ci://benchmarks/BENCH-EXEC-002
+  - ci://benchmarks/BENCH-SNAP-001
+  - ci://tests/process/snapshot-start-here-banner-present
+  - ci://tests/process/snapshot-agent-no-go-checklist-present
+  - ci://tests/process/pr-handoff-examples-present
+  - ci://tests/process/snapshot-authority-map-first
+  - ci://tests/process/agent-no-go-checklist-present
+  - ci://tests/process/agent-simulation-rejection-time-budget
+  - ci://tests/process/repo-structure-present
+  - ci://tests/process/source-stubs-present-in-implementation-paths
+  - ci://tests/process/scoped-agent-instructions-present
+  - ci://tests/process/gitignore-covers-planned-stack
+  - ci://tests/process/docs-archive-layout-present
+  - ci://benchmarks/BENCH-REPO-001
+  - ci://benchmarks/BENCH-REPO-002
+  - ci://tests/process/snapshot-repository-tree-visible
+  - ci://tests/process/no-stale-active-v0153-references
+  - ci://tests/docs/snapshot-repository-tree-present
+  - ci://benchmarks/BENCH-REPO-SMOKE-001
+  - ci://tests/process/no-generated-build-artifacts-in-source-pack
+  - ci://tests/process/snapshot-repository-tree-present
+  - ci://tests/process/no-stale-active-v015x-references
+  - ci://benchmarks/BENCH-SNAP-003
+  - ci://tests/process/repo-smoke-typecheck-passes
+  - ci://tests/process/bootstrap-completion-evidence-attached
+  - ci://tests/process/package-smoke-tests-pass
+  - ci://tests/process/smoke-typecheck-tsc-resolution-documented
+  - ci://tests/process/vertical-slice-release-note-template-present
+  - ci://benchmarks/BENCH-REPO-003
+  - ci://benchmarks/BENCH-BOOTSTRAP-001
+- id: P0-CMD-001
+  gateCard: repo://docs/gates/P0-CMD-001-command-identity-and-unknown-outcome.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-CMD-001
+  ciJobs:
+  - ci://tests/e2e/TC-CMD-001-network-loss-after-commit
+  - ci://tests/api/command-status-ttl
+  - ci://tests/api/command-id-reuse-conflict
+  - ci://tests/client/optimistic-ui-conflict-resolution
+  - ci://tests/client/ambiguous-command-blocks-blind-retry
+  - ci://tests/security/command-log-redaction
+  - ci://tests/security/command-log-no-raw-request-body
+  - ci://tests/sql/aud-001-command-audit-domain-outbox-correlation
+  - ci://tests/api/command-pending-duplicate
+  - ci://tests/client/ambiguous-requires-refresh
+  - ci://tests/e2e/vertical-slice/safe-cell-edit
+  - ci://tests/client/ambiguous-retry-after-refresh-confirmation
+  - ci://tests/client/pending-indicator-command-id-visible
+  - ci://tests/client/offline-queue-stops-on-ambiguity
+  - ci://tests/client/optimistic-batch-disabled-before-partition-policy
+  - ci://tests/chaos/command-db-connection-kill-mid-transaction
+  - ci://tests/chaos/command-network-partition-after-ledger-success
+  - ci://benchmarks/BENCH-CHAOS-001
+  - ci://tests/command/transaction-boundary-atomic-current-audit-domain-outbox
+  - ci://tests/command/numeric-ledger-port-postgres-adapter-participates-in-tx
+  - ci://tests/command/command-claim-duplicate-pending-no-second-execution
+  - ci://tests/command/boundary-b-rollback-leaves-no-audit-domain-outbox
+  - ci://tests/command/savepoint-policy-does-not-hide-required-write-failure
+  - ci://tests/api/command-transaction-boundary-savepoints
+  - ci://tests/api/command-ledger-port-in-same-pg-transaction
+  - ci://benchmarks/BENCH-CMD-TX-001
+  - ci://tests/api/transaction-boundary-atomic-current-audit-domain-outbox
+  - ci://tests/api/numeric-ledger-port-postgres-adapter-participates-in-tx
+  - ci://tests/ui/grid-keyboard-navigation-basic
+  - ci://tests/ui/grid-screen-reader-labels-basic
+  - ci://tests/ui/touch-edit-does-not-bypass-command-api
+- id: P0-LIVE-001
+  gateCard: repo://docs/gates/P0-LIVE-001-polling-first-outbox-live-updates.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-LIVE-001
+  ciJobs:
+  - ci://tests/live-update/outbox-polling-replay
+  - ci://tests/live-update/sse-subscription-handshake
+  - ci://tests/live-update/full-refresh-fallback
+  - ci://tests/data/outbox-retention-gap-forces-full-refresh
+  - ci://tests/live-update/outbox-retention-gap-refresh
+  - ci://tests/data/outbox-schema-index-contract
+  - ci://benchmarks/BENCH-LIVE-001
+  - ci://benchmarks/BENCH-NOTIFY-001
+  - ci://tests/data/outbox-schema-contract
+  - ci://benchmarks/BENCH-LIVE-001-100-sse-subscribers
+  - ci://tests/live-update/wakeup-coalescing-no-duplicate-delivery
+  - ci://tests/chaos/outbox-retention-gap-full-refresh
+  - ci://tests/live-update/outbox-demand-filter-payload-fetch-minimized
+  - ci://tests/live-update/outbox-payload-budget-full-refresh
+  - ci://tests/live-update/outbox-payload-hash-mismatch-blocks-delivery
+  - ci://tests/live-update/outbox-explain-no-seq-scan
+  - ci://tests/chaos/outbox-bloat-high-churn-retention-gap
+  - ci://benchmarks/BENCH-LIVE-OUTBOX-POLL-001
+- id: P0-INV-001
+  gateCard: repo://docs/gates/P0-INV-001-security-invariant-ci-enforcement.md
+  ciJobs:
+  - ci://tests/security/invariant-manifest-validation
+  - ci://tests/security/release-blocker-invariants
+  - ci://tests/security/evidence-uri-scheme-validation
+  - ci://tests/observability/otel-reference-contract
+  - ci://benchmarks/BENCH-OBS-002
+  - ci://tests/observability/otel-reference-conventions
+- id: P0-BATCH-001
+  gateCard: repo://docs/gates/P0-BATCH-001-transactional-batch-partition-validation.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-BATCH-001
+  ciJobs:
+  - ci://tests/batch/partition-policy-validation
+  - ci://tests/fuzz/batch-partitioner
+  - ci://tests/batch/union-find-10k-compile-budget
+  - ci://benchmarks/BENCH-BATCH-001
+- id: P0-RATE-001
+  gateCard: repo://docs/gates/P0-RATE-001-hot-path-rate-limit-safety.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-RATE-001
+  ciJobs:
+  - ci://tests/rate-limit/local-token-bucket
+  - ci://tests/rate-limit/cross-instance-budget-division
+  - ci://tests/rate-limit/no-pg-counter-write-on-edit-hot-path
+  - ci://benchmarks/BENCH-RATE-001
+  - ci://tests/rate-limit/credential-stuffing-throttled-before-edit-path
+  - ci://tests/rate-limit/high-risk-command-postgres-ceiling
+  - ci://tests/rate-limit/no-ordinary-edit-pg-counter-write
+- id: P1-FORM-001
+  gateCard: repo://docs/gates/P1-FORM-001-formula-worker-resident-graph.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-FORM-001
+  ciJobs:
+  - ci://benchmarks/BENCH-FORM-001
+  - ci://tests/formula/worker-graph-corruption-recovery
+  - ci://tests/formula/stale-safe-decision-critical-blocking
+- id: P1-LEDGER-001
+  gateCard: repo://docs/gates/P1-LEDGER-001-tigerbeetle-numeric-ledger-spike.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-LEDGER-001
+  ciJobs:
+  - ci://tests/ledger/deterministic-transfer-id
+  - ci://tests/ledger/no-direct-balance-update
+  - ci://tests/ledger/projection-rebuild-from-transfers
+  - ci://tests/ledger/account-constraint-enforcement
+  - ci://tests/ledger/tigerbeetle-account-import
+  - ci://tests/ledger/tigerbeetle-transfer-replay
+  - ci://tests/ledger/ambiguous-command-lookup-by-transfer-id
+  - ci://tests/ledger/account-filter-mirror-indexes
+  - ci://tests/ledger/financial-balanced-posting-flow
+  - ci://tests/ledger/movement-group-replay
+  - ci://tests/ledger/postgres-mirror-index-sync
+  - ci://tests/ledger/query-filter-mirror-indexes
+  - ci://tests/ledger/stock-available-reserved-shipped-flow
+  - ci://reports/reconciliation/ledger-shadow-mode
+  - ci://benchmarks/BENCH-LEDGER-001
+  - ci://benchmarks/BENCH-LEDGER-002
+  - ci://tests/ledger/post-cutover-pg-repair-after-ledger-success
+  - ci://tests/ledger/tigerbeetle-field-assignment-policy
+  - ci://tests/sql/tigerbeetle-queryfilter-mirror-indexes
+  - ci://tests/ledger/field-assignment-policy-registry
+  - ci://tests/ledger/field-assignment-policy-registry-valid
+  - ci://tests/ledger/tb-query-filter-mirror-indexes-present
+  - ci://tests/ledger/tb-account-filter-mirror-indexes-present
+  - ci://tests/ledger/hybrid-transfer-user-data-is-movement-group
+  - ci://tests/ledger/account-user-data-is-dimension-group
+  - ci://tests/ledger/stock-default-cross-sku-guard
+  - ci://benchmarks/BENCH-LEDGER-FIELD-001
+  - ci://benchmarks/BENCH-LEDGER-007
+  - ci://benchmarks/BENCH-LEDGER-006
+  - ci://benchmarks/BENCH-LEDGER-005
+  - ci://benchmarks/BENCH-LEDGER-004
+  - ci://benchmarks/BENCH-LEDGER-003
+  - ci://tests/ledger/transfer-payload-hash-conflict-detected
+  - ci://tests/ledger/pending-transfer-lifecycle-slos
+  - ci://tests/ledger/stock-default-semantic-compatibility
+  - ci://tests/ledger/mvp-command-uses-only-allowed-codes
+  - ci://tests/ledger/same-ledger-debit-credit-enforcement
+  - ci://tests/ledger/tb-id-reserved-boundaries
+  - ci://tests/ledger/tb-transfer-registry-no-self-transfer
+  - ci://tests/ledger/tb-ledger-u32-postgres-range
+  - ci://tests/ledger/tb-code-u16-postgres-range
+  - ci://tests/ledger/transfer-id-unique-command-line-movement-kind
+  - ci://tests/ledger/transfer-id-canonical-derivation
+  - ci://tests/ledger/deterministic-transfer-id-unique-inputs
+  - ci://tests/ledger/stock-default-cross-sku-semantic-compatibility-fixtures
+  - ci://tests/ledger/deterministic-transfer-id-canonical-inputs
+  - ci://tests/ledger/unique-command-line-movement-kind
+  - ci://tests/ledger/tb-code-u16-range
+  - ci://tests/ledger/tb-ledger-u32-range
+  - ci://tests/ledger/tb-registry-id-reserved-boundaries
+  - ci://tests/ledger/stock-transformation-approval-required
+  - ci://tests/ledger/id-derivation-test-vectors
+  - ci://tests/ledger/id-derivation-fuzz-1m
+  - ci://tests/ledger/id-derivation-cross-adapter-parity
+  - ci://tests/ledger/non-ledgerable-numeric-field-rejected
+  - ci://tests/ledger/ledgerable-command-uses-numeric-ledger-port
+  - ci://tests/security/tb-user-data-no-pii
+  - ci://tests/security/ledger-mirror-rls-tenant-isolation
+  - ci://tests/ledger/shadow-reconciliation-pg-vs-tigerbeetle-criteria
+  - ci://tests/ledger/high-cardinality-sku-query-plan
+  - ci://tests/ledger/id-derivation-sql-typescript-parity
+  - ci://tests/ledger/id-derivation-fuzz-10k-pr
+  - ci://tests/ledger/id-derivation-fuzz-1m-nightly
+  - ci://tests/ledger/payload-hash-cross-adapter-parity
+  - ci://tests/ledger/shadow-day-in-life-runbook-drill
+  - ci://tests/ledger/shadow-mode-day-in-life-runbook-reviewed
+  - ci://tests/ledger/shadow-worker-does-not-block-mvp-edit-path
+  - ci://benchmarks/BENCH-LEDGER-SHADOW-OPS-001
+- id: P1-AI-001
+  gateCard: repo://docs/gates/P1-AI-001-pgvector-semantic-retrieval.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-AI-001
+  ciJobs:
+  - ci://tests/ai/tenant-permission-filtered-retrieval
+  - ci://tests/ai/regulated-data-embedding-block
+  - ci://tests/ai/embedding-invalidation-source-version
+  - ci://tests/ai/suggestions-require-command
+  - ci://tests/ai/no-vector-columns-in-core-operational-tables
+  - ci://tests/ai/embeddings-derived-only
+  - ci://benchmarks/BENCH-AI-001
+  - ci://benchmarks/BENCH-AI-002
+  - ci://benchmarks/BENCH-AI-003
+  - ci://tests/ai/semantic-contract-schema-present
+  - ci://tests/ai/hybrid-search-uses-lexical-and-vector-components
+  - ci://tests/ai/ann-filtering-recall-gate
+  - ci://tests/ai/retrieval-revalidates-source-version
+  - ci://tests/ai/dedicated-semantic-db-feed-replay
+  - ci://tests/ai/duckdb-derived-chunks-enter-through-registry
+  - ci://benchmarks/BENCH-AI-004
+  - ci://benchmarks/BENCH-AI-005
+  - ci://benchmarks/BENCH-AI-006
+  - ci://tests/ai/retrieval-revalidator-required
+  - ci://tests/ai/retrieval-revalidator-filters-stale-source
+  - ci://tests/ai/retrieval-revalidator-blocks-regulated-data
+  - ci://tests/ai/retrieval-revalidator-requires-deterministic-ledger-fact
+  - ci://tests/api/retrieval-revalidator-openapi-contract
+  - ci://tests/ai/retrieval-revalidator-warm-cache-budget
+  - ci://tests/ai/retrieval-revalidator-cold-cache-degrades-not-bypasses
+  - ci://tests/ai/retrieval-revalidator-cache-key-includes-permission-scope
+  - ci://tests/ai/retrieval-revalidator-blocks-when-redaction-policy-unavailable
+  - ci://tests/ai/retrieval-revalidator-middleware-required
+  - ci://tests/ai/retrieval-revalidator-cache-key-policy-versioned
+  - ci://tests/ai/retrieval-revalidator-cache-cannot-expand-permissions
+  - ci://benchmarks/BENCH-AI-REVALIDATOR-001
+  - ci://benchmarks/retrieval-revalidator-warm-cache-budget
+- id: P1-ANALYTICS-001
+  gateCard: repo://docs/gates/P1-ANALYTICS-001-duckdb-analytics-plane.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-ANALYTICS-001
+  ciJobs:
+  - ci://tests/analytics/duckdb-artifact-watermark-completeness
+  - ci://tests/analytics/duckdb-no-operational-writeback
+  - ci://tests/analytics/duckdb-permission-filtered-artifacts
+  - ci://tests/analytics/duckdb-blocked-regulated-artifact-rejected
+  - ci://tests/analytics/duckdb-vs-postgres-projection-aggregate-parity
+  - ci://tests/analytics/duckdb-ledger-derived-projection-only
+  - ci://tests/data-plane/no-specialized-plane-operational-write-path
+  - ci://benchmarks/BENCH-DUCKDB-001
+  - ci://benchmarks/BENCH-DUCKDB-002
+  - ci://benchmarks/BENCH-DUCKDB-003
+  - ci://benchmarks/BENCH-DUCKDB-004
+  - ci://benchmarks/BENCH-DATA-PLANE-001
+  - ci://tests/analytics/no-duckdb-on-edit-hot-path
+  - ci://tests/analytics/snapshot-manifest-lineage
+  - ci://tests/analytics/tenant-permission-filtered-query
+  - ci://tests/analytics/regulated-data-export-blocked
+  - ci://tests/analytics/query-job-resource-limits
+  - ci://tests/analytics/duckdb-result-derived-only
+  - ci://tests/analytics/postgres-attach-internal-only
+  - ci://tests/analytics/analytics-lineage-edges-complete
+  - ci://tests/analytics/multi-plane-query-requires-deterministic-output
+  - ci://benchmarks/BENCH-ANALYTICS-001
+  - ci://benchmarks/BENCH-ANALYTICS-002
+  - ci://benchmarks/BENCH-ANALYTICS-003
+  - ci://benchmarks/BENCH-ANALYTICS-004
+  - ci://benchmarks/BENCH-ANALYTICS-005
+  - ci://benchmarks/BENCH-ANALYTICS-006
+  - ci://benchmarks/BENCH-ANALYTICS-007
+  - ci://tests/analytics/duckdb-not-in-command-path
+  - ci://tests/analytics/export-manifest-lineage
+  - ci://tests/analytics/export-permission-scope-enforced
+  - ci://tests/analytics/duckdb-worker-readonly-operational-credentials
+  - ci://tests/analytics/report-result-audited
+  - ci://tests/analytics/report-reconciles-with-postgres-projection
+  - ci://tests/analytics/numeric-report-reconciles-with-ledger-projection
+  - ci://tests/security/analytics-regulated-data-export-block
+  - ci://tests/ai/ai-numeric-answer-uses-deterministic-query
+- id: P1-OUTBOX-001
+  gateCard: repo://docs/gates/P1-OUTBOX-001-post-mvp-outbox-fanout-cdc-spike.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-OUTBOX-001
+  ciJobs:
+  - ci://tests/outbox/postgres-outbox-authoritative-source
+  - ci://tests/outbox/event-envelope-contract
+  - ci://tests/outbox/event-id-idempotency-key-stable
+  - ci://tests/outbox/payload-hash-conflict-detected
+  - ci://tests/outbox/consumer-checkpoint-idempotency
+  - ci://tests/outbox/derived-plane-job-replay
+  - ci://tests/outbox/cdc-shadow-parity
+  - ci://tests/outbox/broker-outage-does-not-block-command-commit
+  - ci://tests/outbox/broker-duplicate-delivery-deduped
+  - ci://tests/outbox/schema-version-rollout-compatible
+  - ci://tests/outbox/regulated-payload-routing-blocked
+  - ci://tests/outbox/pgvector-events-require-embedding-eligibility
+  - ci://tests/outbox/duckdb-events-require-export-policy
+  - ci://tests/outbox/tigerbeetle-events-require-projection-repair-state
+  - ci://benchmarks/BENCH-OUTBOX-001
+  - ci://benchmarks/BENCH-OUTBOX-002
+  - ci://benchmarks/BENCH-OUTBOX-003
+  - ci://benchmarks/BENCH-OUTBOX-004
+  - ci://benchmarks/BENCH-OUTBOX-005
+  - ci://tests/outbox/mvp-polling-reader-not-regressed-by-envelope-fields
+  - ci://tests/outbox/envelope-size-budget-enforced
+  - ci://tests/chaos/outbox-bloat-high-churn-retention-gap
+  - ci://benchmarks/BENCH-LIVE-OUTBOX-POLL-001
+  - ci://tests/ops/outbox-retention-gap-recovery-playbook
+- id: P1-INTEGRATION-001
+  gateCard: repo://docs/gates/P1-INTEGRATION-001-external-systems-integration-spike.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-INTEGRATION-001
+  ciJobs:
+  - ci://tests/integration/inbound-staging-command-proposal
+  - ci://tests/integration/outbound-outbox-delivery-idempotent
+  - ci://tests/integration/inbound-idempotency-conflict
+  - ci://tests/integration/connector-outage-does-not-block-command-commit
+  - ci://tests/integration/dead-letter-replay
+  - ci://tests/integration/regulated-sink-blocked
+  - ci://tests/integration/external-object-mapping-reconciliation
+  - ci://tests/integration/no-direct-operational-table-write
+  - ci://tests/integration/no-direct-tigerbeetle-write
+  - ci://tests/integration/contracts-openapi-asyncapi-generated
+  - ci://tests/integration/integration-runtime-absent-from-phase0-edit-path
+  - ci://tests/integration/external-id-mapping-source-versioned
+  - ci://tests/integration/scim-provisioning-does-not-bypass-tenant-isolation
+  - ci://tests/security/integration-credential-ref-no-secret-material
+  - ci://tests/security/integration-sink-classification-max-enforced
+  - ci://tests/synergy/integration-data-to-pgvector-requires-revalidator
+  - ci://tests/synergy/integration-data-to-duckdb-uses-export-manifest
+  - ci://tests/synergy/ledgerable-integration-change-uses-numeric-ledger-port
+  - ci://tests/integration/inbound-payload-scan-schema-validated-before-command-proposal
+  - ci://tests/integration/inbound-payload-size-content-type-limits
+  - ci://tests/integration/inbound-schema-version-compatibility
+  - ci://tests/integration/connector-outage-mid-import
+  - ci://tests/integration/partial-staging-failure-dead-letter
+  - ci://tests/integration/mapping-conflict-blocks-command-proposal
+  - ci://tests/integration/idempotency-property-tests
+  - ci://tests/integration/adapter-sdk-forbids-operational-repository-import
+  - ci://tests/integration/adapter-sdk-produces-command-proposal-only
+  - ci://tests/integration/adapter-sdk-no-direct-ledger-or-outbox-write
+  - ci://tests/security/integration-secret-rotation-required
+  - ci://tests/security/integration-service-account-scope-enforced
+  - ci://tests/security/integration-secret-scanning-fixtures-docs
+  - ci://tests/security/integration-credential-revocation-blocks-io
+  - ci://tests/security/integration-secret-access-audited
+  - ci://tests/fixtures/integration-pilot-v1-small-valid
+  - ci://benchmarks/BENCH-INTEGRATION-001
+  - ci://benchmarks/BENCH-INTEGRATION-002
+  - ci://benchmarks/BENCH-INTEGRATION-003
+  - ci://benchmarks/BENCH-INTEGRATION-004
+  - ci://benchmarks/BENCH-INTEGRATION-005
+  - ci://benchmarks/BENCH-INTEGRATION-006
+  - ci://benchmarks/BENCH-INTEGRATION-007
+  - ci://tests/integration/staging-validation-gates-before-command-proposal
+  - ci://tests/integration/negative-fixture-quarantined-before-command
+  - ci://tests/security/integration-kms-envelope-encryption-required
+  - ci://tests/security/integration-revocation-propagates-to-active-connections
+  - ci://tests/observability/integration-metrics-emitted
+  - ci://tests/integration/inbound-negative-payload-quarantine-dead-letter
+  - ci://tests/security/integration-credential-revocation-propagates-to-workers
+  - ci://tests/security/integration-credential-rotation-overlap-window
+  - ci://tests/security/integration-envelope-encryption-tenant-dek-kms-master-key
+  - ci://tests/observability/integration-staging-scan-dead-letter-metrics
+  - ci://tests/integration/revoked-credential-schema-mismatch-no-command-proposal
+- id: P1-SYNERGY-001
+  gateCard: repo://docs/gates/P1-SYNERGY-001-system-integration-boundary.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-SYNERGY-001
+  ciJobs:
+  - ci://tests/synergy/no-cross-plane-direct-mutation
+  - ci://tests/synergy/cross-plane-envelope-complete
+  - ci://tests/synergy/specialized-plane-failure-degrades-safely
+  - ci://tests/synergy/ai-answer-cites-deterministic-records
+  - ci://tests/synergy/duckdb-no-operational-writeback
+  - ci://tests/synergy/tigerbeetle-analytics-via-postgres-projection
+  - ci://tests/synergy/formula-worker-no-command-bypass
+  - ci://benchmarks/BENCH-SYNERGY-001
+  - ci://benchmarks/BENCH-SYNERGY-002
+  - ci://benchmarks/BENCH-SYNERGY-003
+  - ci://tests/synergy/cross-plane-lineage-propagation
+  - ci://tests/synergy/specialized-plane-failure-does-not-block-edit
+  - ci://tests/data-plane/cross-plane-lineage-propagation
+  - ci://tests/data-plane/permission-scope-consistency
+  - ci://tests/data-plane/no-specialized-plane-operational-write-path
+  - ci://tests/data-plane/stale-plane-degradation
+  - ci://tests/data-plane/multi-plane-query-deterministic-source-references
+  - ci://tests/data-plane/outbox-watermark-derived-job-freshness
+  - ci://tests/data-plane/specialized-plane-failure-does-not-block-edit
+  - ci://tests/synergy/pgvector-retrieval-revalidates-before-duckdb-or-ledger-answer
+  - ci://tests/data-plane/pgvector-not-in-edit-path
+  - ci://tests/synergy/retrieval-revalidator-runs-before-cross-plane-answer
+  - ci://tests/synergy/retrieval-revalidator-blocks-direct-mutation
+  - ci://tests/observability/otel-reference-conventions
+  - ci://tests/ops/recovery-playbooks-v0133-drill
+- id: P1-UX-001
+  gateCard: repo://docs/gates/P1-UX-001-tiled-spreadsheet-workspace-spike.md
+  sloReference: repo://docs/slo-baseline.yml#benchmarks.BENCH-UX-001
+  ciJobs:
+  - ci://tests/ui/grid-and-transpose-same-command
+  - ci://tests/ui/transposed-view-field-identity-permissions
+  - ci://tests/ui/workspace-layout-state-not-domain-state
+  - ci://tests/ui/tile-subscription-dedup
+  - ci://tests/ui/derived-plane-tile-revalidation
+  - ci://tests/ui/command-status-visible-in-tiles
+  - ci://tests/ui/keyboard-navigation-grid-to-tile
+  - ci://benchmarks/BENCH-UX-001
+  - ci://benchmarks/BENCH-UX-002
+  - ci://benchmarks/BENCH-UX-003
+  - ci://tests/ui/p1-ux-starts-only-after-vertical-slice-green
+  - ci://tests/ui/no-tile-transpose-mutation-before-p1-ux
+  - ci://tests/ui/grid-keyboard-navigation-basic
+  - ci://tests/ui/grid-screen-reader-labels-basic
+  - ci://tests/ui/touch-edit-does-not-bypass-command-api
+requiredDocs:
+- repo://.github/workflows/validate-pack.yml
+- repo://CHANGELOG.md
+- repo://docs/adr/ADR-0019-target-numeric-ledger-plane-tigerbeetle.md
+- repo://docs/adr/ADR-0020-tigerbeetle-field-assignment-policy.md
+- repo://docs/adr/ADR-0021-post-mvp-semantic-retrieval-pgvector.md
+- repo://docs/adr/ADR-0022-post-mvp-analytical-plane-duckdb.md
+- repo://docs/adr/ADR-0023-system-plane-integration-strategy.md
+- repo://docs/adr/ADR-0024-post-mvp-outbox-fanout-and-cdc-strategy.md
+- repo://docs/api/command-status-openapi.md
+- repo://docs/api/command-status.openapi.yml
+- repo://docs/api/error-taxonomy.md
+- repo://docs/api/retrieval-revalidator.openapi.yml
+- repo://docs/architecture/v0.13-plane-interface-contracts.md
+- repo://docs/architecture/v0.13-system-integration-strategy.md
+- repo://docs/benchmarks/phase0-benchmark-plan.md
+- repo://docs/data/analytics-export-contract.md
+- repo://docs/data/command-outbox-retention-partitioning.md
+- repo://docs/data/duckdb-analytics-plane.md
+- repo://docs/data/event-envelope-contract.md
+- repo://docs/data/ledger-id-derivation-reference.md
+- repo://docs/data/ledgerability-classification.md
+- repo://docs/data/numeric-ledger-contract.md
+- repo://docs/data/outbox-integration-strategy-options.md
+- repo://docs/data/outbox-polling-performance-contract.md
+- repo://docs/data/pgvector-integration-strategy-options.md
+- repo://docs/data/pgvector-semantic-retrieval-plane.md
+- repo://docs/data/pilot-dataset-definition.md
+- repo://docs/data/post-mvp-data-planes.md
+- repo://docs/data/schema-evolution-playbook.md
+- repo://docs/data/semantic-retrieval-contract.md
+- repo://docs/data/system-plane-strategy-options.md
+- repo://docs/data/tigerbeetle-field-assignment-policy.md
+- repo://docs/data/tigerbeetle-target-model.md
+- repo://docs/data/v013-synergistic-integration-strategy.md
+- repo://docs/dev/batch-partition-policy.md
+- repo://docs/dev/client-optimistic-ui-and-conflicts.md
+- repo://docs/dev/command-lifecycle.md
+- repo://docs/dev/duckdb-analytics-worker.md
+- repo://docs/dev/formula-worker-protocol.md
+- repo://docs/dev/numeric-ledger-plane.md
+- repo://docs/dev/outbox-polling-reader.md
+- repo://docs/dev/rate-limiter.md
+- repo://docs/dev/retrieval-revalidator.md
+- repo://docs/dev/security-invariant-manifest.md
+- repo://docs/diagrams/architecture-context.md
+- repo://docs/diagrams/implementation-readiness-v0.13.3.md
+- repo://docs/diagrams/ledger-plane-and-migration.md
+- repo://docs/diagrams/numeric-ledger-plane.md
+- repo://docs/diagrams/outbox-fanout-and-derived-planes.md
+- repo://docs/diagrams/pgvector-semantic-plane.md
+- repo://docs/diagrams/post-mvp-data-plane-synergy.md
+- repo://docs/diagrams/post-mvp-data-planes.md
+- repo://docs/diagrams/revalidation-and-outbox-review-closure.md
+- repo://docs/gates/P1-AI-001-pgvector-semantic-retrieval.md
+- repo://docs/gates/P1-ANALYTICS-001-duckdb-analytics-plane.md
+- repo://docs/gates/P1-LEDGER-001-tigerbeetle-numeric-ledger-spike.md
+- repo://docs/gates/P1-OUTBOX-001-post-mvp-outbox-fanout-cdc-spike.md
+- repo://docs/gates/P1-SYNERGY-001-system-integration-boundary.md
+- repo://docs/ledger/README.md
+- repo://docs/maintenance/normative-source-map.md
+- repo://docs/observability/otel-reference-v0.13.3.yml
+- repo://docs/observability/phase0-observability.md
+- repo://docs/onboarding/engineer-onramp-day1.md
+- repo://docs/onboarding/minimal-reading-path.md
+- repo://docs/ops/duckdb-analytics-runbook.md
+- repo://docs/ops/failure-mode-catalog.md
+- repo://docs/ops/outbox-fanout-runbook.md
+- repo://docs/ops/outbox-wakeup-runbook.md
+- repo://docs/ops/pgvector-retrieval-runbook.md
+- repo://docs/ops/recovery-playbooks-v0.13.3.md
+- repo://docs/ops/tigerbeetle-cutover-rollback-runbook.md
+- repo://docs/ops/tigerbeetle-reconciliation-runbook.md
+- repo://docs/ops/tigerbeetle-shadow-mode-day-in-life.md
+- repo://docs/ops/tigerbeetle-shadow-worker-runbook.md
+- repo://docs/ops/unknown-command-outcome-runbook.md
+- repo://docs/plan/post-mvp-duckdb-transition.md
+- repo://docs/plan/post-mvp-outbox-transition.md
+- repo://docs/plan/post-mvp-tigerbeetle-transition.md
+- repo://docs/plan/vertical-slice-acceptance-checklist.md
+- repo://docs/plan/week1-vertical-slice-kickoff.md
+- repo://docs/process/decision-waiver-log.md
+- repo://docs/process/owner-signoff-template.md
+- repo://docs/qa/ai-benchmark-plan.md
+- repo://docs/qa/analytics-benchmark-plan.md
+- repo://docs/qa/chaos-test-plan.md
+- repo://docs/qa/duckdb-benchmark-plan.md
+- repo://docs/qa/ledger-benchmark-plan.md
+- repo://docs/qa/outbox-fanout-benchmark-plan.md
+- repo://docs/qa/phase0-benchmark-plan.md
+- repo://docs/archive/review/archive-diff-recovery-v0.12.7.md
+- repo://docs/archive/review/critical-review-v0.13-pgvector-synergy.md
+- repo://docs/archive/review/critical-review-v0.13.3.md
+- repo://docs/archive/review/critical-review-v0.13.md
+- repo://docs/archive/review/review-response-v0.12.6.md
+- repo://docs/runbooks/outbox-wakeup.md
+- repo://docs/runbooks/unknown-command-outcome.md
+- repo://docs/security/command-log-privacy.md
+- repo://docs/slo-target-rationale.md
+- repo://docs/observability/otel-reference.yml
+- repo://docs/archive/review/critical-review-v0.14.md
+- repo://docs/data/external-integration-strategy-options.md
+- repo://docs/data/external-integration-contract.md
+- repo://docs/dev/external-integration-adapter.md
+- repo://docs/adr/ADR-0025-post-mvp-external-systems-integration-strategy.md
+- repo://docs/gates/P1-INTEGRATION-001-external-systems-integration-spike.md
+- repo://docs/plan/post-mvp-external-integration-transition.md
+- repo://docs/qa/external-integration-benchmark-plan.md
+- repo://docs/ops/external-integration-runbook.md
+- repo://docs/diagrams/external-integration-and-post-mvp-planes.md
+- repo://docs/api/external-integration.openapi.yml
+- repo://docs/api/external-events.asyncapi.yml
+- repo://docs/security/integration-security-boundary.md
+- repo://docs/archive/review/critical-review-v0.14.2.md
+- repo://docs/archive/review/critical-review-v0.14.3.md
+- repo://docs/security/integration-credential-management.md
+- repo://docs/adr/ADR-0026-integration-credential-and-service-account-boundary.md
+- repo://docs/security/threat-model-summary.md
+- repo://docs/dev/external-adapter-sdk-contract.md
+- repo://docs/plan/integration-prototype-ticket.md
+- repo://docs/ui/spreadsheet-tiled-workspace-strategy.md
+- repo://docs/ui/transposed-record-view-contract.md
+- repo://docs/ui/tile-contract.md
+- repo://docs/ui/workspace-layout-state.md
+- repo://docs/ui/keyboard-and-focus-model.md
+- repo://docs/ui/derived-plane-tiles.md
+- repo://docs/adr/ADR-0027-spreadsheet-tiled-workspace-ui.md
+- repo://docs/diagrams/tiled-workspace-ui.md
+- repo://docs/qa/ui-benchmark-plan.md
+- repo://tests/fixtures/batch/inventory/positive.json
+- repo://tests/fixtures/batch/inventory/negative.json
+- repo://tests/fixtures/integration/pilot-v1-small-import.json
+- repo://invariants/sql/aud-001-command-audit-domain-outbox-correlation.sql
+- repo://tests/fixtures/integration/pilot-v1-negative-quarantine.json
+- repo://tests/fixtures/integration/pilot-v1-small-import-negative.json
+- repo://tests/fixtures/integration/pilot-v1-revoked-credential-schema-mismatch.json
+- repo://AGENTS.md
+- repo://spec/spreadsheet_native_erp_technical_spec_v0_16_1_research_driven_phase0_bootstrap_complete_execution.md
+- repo://docs/review/critical-review-v0.16.1.md
+- repo://docs/implementation/ai-coding-agent-roadmap.md
+- repo://docs/implementation/phase0-agent-work-orders.md
+- repo://docs/implementation/agent-operating-model.md
+- repo://docs/implementation/agent-pr-validation-playbook.md
+- repo://docs/qa/agent-implementation-validation-plan.md
+- repo://docs/gates/P0-EXEC-001-ai-agent-implementation-readiness.md
+- repo://docs/diagrams/ai-agent-implementation-roadmap.md
+- repo://docs/snapshot-v0.16.1.md
+- repo://docs/post-mvp/post-mvp-planes-vnext.md
+- repo://docs/tech-stack-decisions.md
+- repo://docs/skeletons/README.md
+- repo://apps/api/src/commands/CommandHandlerBase.ts
+- repo://apps/api/src/outbox/OutboxPoller.ts
+- repo://packages/domain/src/ledger/NumericLedgerPort.ts
+- repo://apps/api/src/retrieval/RetrievalRevalidator.middleware.ts
+- repo://docs/process/validation-waiver-policy.md
+- repo://docs/qa/agent-simulation-test.md
+- repo://docs/pack-health-dashboard.md
+- repo://docs/implementation/pr-handoff-examples.md
+- repo://docs/qa/agent-simulation-run-v0.16.1.md
+- repo://docs/implementation/project-directory-structure.md
+- repo://docs/implementation/code-stub-index.md
+- repo://.gitignore
+- repo://package.json
+- repo://pnpm-workspace.yaml
+- repo://.github/copilot-instructions.md
+- repo://.cursor/rules/phase0-boundaries.mdc
+- repo://docs/changelog/CHANGELOG-v0.16.1.md
+- repo://docs/qa/repository-smoke-test-v0.16.1.md
+- repo://scripts/smoke-typecheck.sh
+- repo://tsconfig.smoke.json
+- repo://docs/qa/bootstrap-completion-evidence-v0.16.1.md
+- repo://docs/implementation/phase0-work-order-assignments-v0.16.1.md
+- repo://docs/release/vertical-slice-release-note-template.md
+- repo://scripts/smoke-package-tests.sh

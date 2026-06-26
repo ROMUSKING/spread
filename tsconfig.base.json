@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@erp/domain/*": ["packages/domain/src/*"],
+      "@erp/db/*": ["packages/db/src/*"],
+      "@erp/contracts/*": ["packages/contracts/src/*"],
+      "@erp/observability/*": ["packages/observability/src/*"],
+      "@erp/config/*": ["packages/config/src/*"],
+      "@erp/ui/*": ["packages/ui/src/*"],
+      "@erp/testkit/*": ["packages/testkit/src/*"]
+    }
+  }
+}

@@ -1,0 +1,96 @@
+version: 0.13.3
+last_reviewed: '2026-06-26'
+status: implementation_reference
+examples:
+- name: command_vertical_slice_success
+  spans:
+  - name: erp.command.receive
+    attributes:
+      command_type: edit_cell
+      command_status: received
+      duplicate_inflight: false
+      tenant_id_hash: sha256:example
+      correlation_id: corr-example
+  - name: erp.command.execute
+    attributes:
+      command_type: edit_cell
+      numeric_transfer_count: 1
+      workbook_id_hash: sha256:workbook
+  - name: erp.db.business_tx.commit
+    attributes:
+      audit_event_count: 1
+      domain_event_count: 1
+      outbox_event_count: 1
+      duration_ms: 47
+  metrics:
+  - name: erp_command_duration_ms
+    type: histogram
+    labels: {command_type: edit_cell, status: committed, risk_class: ordinary}
+    slo: p95 <= 180ms
+- name: outbox_poll_with_demand_filter
+  spans:
+  - name: erp.outbox.poll_sql
+    attributes:
+      last_watermark: 123400
+      tenant_count: 18
+      limit: 500
+      rows_returned: 500
+      duration_ms: 41
+      seq_scan_detected: false
+  - name: erp.outbox.demand_filter
+    attributes:
+      events_seen: 500
+      events_deliverable: 37
+      events_skipped_no_local_subscriber: 463
+      payload_bytes_planned: 86000
+  metrics:
+  - name: erp_outbox_poll_sql_seconds
+    type: histogram
+    labels: {instance: app-1, tenant_region: eu-west}
+    slo: p99 <= 0.25s
+- name: command_recovery_after_lost_response
+  spans:
+  - name: erp.command.status_lookup
+    attributes:
+      command_status: committed
+      recovery_path: response_lost_after_commit
+      correlated_outbox_found: true
+  metrics:
+  - name: erp_command_recovery_seconds
+    type: histogram
+    labels: {path: response_lost_after_commit}
+    slo: p95 <= 30s
+- name: retrieval_revalidator_blocks_regulated_candidate
+  spans:
+  - name: erp.retrieval.revalidate
+    attributes:
+      retrieval_mode: mixed
+      candidate_count: 20
+      filtered_count: 2
+      returned_count: 18
+      regulated_block_count: 1
+      duration_ms: 19
+  metrics:
+  - name: erp_retrieval_regulated_candidates_blocked_total
+    type: counter
+    alert: any production non-test event pages Security and Compliance
+- name: ledger_strict_shadow_reconciliation
+  spans:
+  - name: erp.ledger.shadow_post
+    attributes:
+      ledger_code: stock_uom_default
+      movement_kind: stock_reserve
+      transfer_count: 2
+      duration_ms: 64
+      result_class: exists_same_payload_or_created
+  - name: erp.ledger.reconcile
+    attributes:
+      ledger_code: stock_uom_default
+      window_start: '2026-06-26T10:00:00Z'
+      window_end: '2026-06-26T10:05:00Z'
+      mismatch_count: 0
+      duration_ms: 733
+  metrics:
+  - name: ledger_shadow_mismatch_count
+    type: gauge
+    alert: any non-zero value blocks cutover

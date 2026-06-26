@@ -1,0 +1,14 @@
+{
+  "fixture": "pilot-v1-negative-external-import-quarantine",
+  "tenantId": "00000000-0000-4000-8000-000000000014",
+  "integrationConnectionId": "00000000-0000-4000-8000-000000000041",
+  "externalOperationId": "malware-or-schema-invalid-001",
+  "contentType": "application/json",
+  "payloadSizeBytes": 512,
+  "schemaKey": "order-import",
+  "schemaVersion": 1,
+  "malwareScanStatus": "quarantined",
+  "schemaValidationStatus": "invalid",
+  "expectedOutcome": "no_command_proposal_created",
+  "expectedFailureCode": "INTEGRATION_PAYLOAD_NOT_ELIGIBLE"
+}

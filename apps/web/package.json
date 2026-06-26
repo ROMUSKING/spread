@@ -1,0 +1,13 @@
+{
+  "name": "@erp/web",
+  "version": "0.16.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "typecheck": "tsc -p ../../tsconfig.smoke.json --pretty false",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/smoke.test.mjs"
+  }
+}

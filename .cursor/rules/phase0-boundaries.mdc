@@ -1,0 +1,12 @@
+---
+description: Spreadsheet-Native ERP Phase 0 authority boundaries
+alwaysApply: true
+---
+Read `AGENTS.md` and `docs/snapshot-v0.16.1.md` before implementation.
+
+Rules:
+- Mutations go through command handlers only.
+- Outbound events originate from `outbox_events` only.
+- PostgreSQL is the Phase 0 command/control/outbox/projection plane.
+- TigerBeetle, pgvector, DuckDB, broker/CDC, external connector runtime, and full tiled workspace are post-MVP/evidence-gated.
+- Run `bash scripts/validate-pack.sh` before handoff.

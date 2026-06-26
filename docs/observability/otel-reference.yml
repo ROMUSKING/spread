@@ -1,0 +1,34 @@
+version: "0.13.3"
+last_reviewed: "2026-06-26"
+status: "reference instrumentation examples"
+spans:
+  erp.command.receive:
+    required_attributes: [erp.tenant_hash, erp.command_id, erp.command_type, erp.trace_id, erp.correlation_id]
+  erp.command.claim:
+    required_attributes: [erp.command_claim_result, erp.request_hash_match, erp.duplicate_inflight]
+  erp.db.business_tx:
+    required_attributes: [erp.tx.includes_current_state, erp.tx.includes_numeric_ledger, erp.tx.includes_audit, erp.tx.includes_domain_events, erp.tx.includes_outbox]
+  erp.outbox.poll_sql:
+    required_attributes: [erp.last_watermark, erp.rows_returned, erp.duration_ms, erp.plan_hash, erp.seq_scan_detected]
+  erp.retrieval.revalidate:
+    required_attributes: [erp.retrieval_id, erp.source_plane, erp.candidate_count, erp.allowed_count, erp.filtered_count]
+metrics:
+  erp_command_transaction_boundary_rollback_total:
+    type: counter
+    labels: [command_type, failure_stage]
+  erp_outbox_poll_sql_duration_ms:
+    type: histogram
+    labels: [instance, tenant_region, plan_hash, seq_scan_detected]
+  erp_ledger_shadow_mismatch_count:
+    type: counter
+    labels: [ledger_family, mismatch_type]
+  erp_retrieval_revalidator_bypass_total:
+    type: counter
+    labels: [endpoint]
+alerts:
+  - name: CommandBoundaryPartialWriteDetected
+    expression: erp_command_transaction_boundary_rollback_total{failure_stage="partial_write_detected"} > 0
+    severity: release_blocker
+  - name: RetrievalRevalidatorBypassed
+    expression: sum(rate(erp_retrieval_revalidator_bypass_total[5m])) > 0
+    severity: release_blocker

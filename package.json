@@ -1,0 +1,27 @@
+{
+  "name": "spreadsheet-native-erp",
+  "private": true,
+  "version": "0.16.1",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "validate:pack": "bash scripts/validate-pack.sh",
+    "agent:validate": "pnpm run validate:all",
+    "smoke": "bash scripts/smoke.sh",
+    "smoke:typecheck": "bash scripts/smoke-typecheck.sh",
+    "typecheck": "bash scripts/smoke-typecheck.sh",
+    "typecheck:stubs": "bash scripts/smoke-typecheck.sh",
+    "validate:all": "bash scripts/validate-pack.sh && bash scripts/smoke-typecheck.sh && bash scripts/smoke-package-tests.sh",
+    "ci:bootstrap": "bash scripts/validate-pack.sh && bash scripts/smoke-typecheck.sh && bash scripts/smoke-package-tests.sh",
+    "test": "bash scripts/smoke-package-tests.sh",
+    "lint": "pnpm -r --if-present lint",
+    "build": "pnpm -r --if-present build",
+    "smoke:package-tests": "bash scripts/smoke-package-tests.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

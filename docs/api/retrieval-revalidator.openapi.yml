@@ -1,0 +1,75 @@
+openapi: 3.0.3
+info:
+  title: Retrieval Revalidator API Contract
+  version: "0.13.2"
+paths:
+  /api/v1/retrieval/query:
+    post:
+      summary: Permissioned retrieval query with mandatory revalidation
+      operationId: retrievalQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, retrievalMode, clientRequestId]
+              properties:
+                query:
+                  type: string
+                retrievalMode:
+                  type: string
+                  enum: [lexical, vector_exact, vector_ann, hybrid, analytics_summary]
+                workbookId:
+                  type: string
+                  format: uuid
+                clientRequestId:
+                  type: string
+      responses:
+        '200':
+          description: Revalidated retrieval response
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [retrievalId, revalidation, results]
+                properties:
+                  retrievalId:
+                    type: string
+                    format: uuid
+                  revalidation:
+                    type: object
+                    required: [status, filteredCandidateCount, returnedCandidateCount]
+                    properties:
+                      status:
+                        type: string
+                        enum: [passed, partial, blocked]
+                      sourceHighWatermarkOutboxId:
+                        type: string
+                      filteredCandidateCount:
+                        type: integer
+                        minimum: 0
+                      returnedCandidateCount:
+                        type: integer
+                        minimum: 0
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [objectType, objectId, sourceVersion, citationKind]
+                      properties:
+                        objectType:
+                          type: string
+                        objectId:
+                          type: string
+                        sourceVersion:
+                          type: string
+                        citationKind:
+                          type: string
+                          enum: [postgres_projection, ledger_projection, analytics_artifact, semantic_chunk, policy_doc, runbook]
+                        snippet:
+                          type: string
+        '403':
+          description: Retrieval blocked by tenant, permission, classification, or compliance policy
+        '409':
+          description: Source version stale; refresh or retry after projection update

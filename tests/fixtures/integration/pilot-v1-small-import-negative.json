@@ -1,0 +1,24 @@
+{
+  "fixture": "pilot-v1-small-external-import-negative",
+  "cases": [
+    {
+      "name": "quarantined_no_command_proposal",
+      "malware_scan_status": "quarantined",
+      "schema_validation_status": "valid",
+      "expected": "no_command_proposal"
+    },
+    {
+      "name": "rejected_no_command_proposal",
+      "malware_scan_status": "clean",
+      "schema_validation_status": "invalid",
+      "expected": "no_command_proposal"
+    },
+    {
+      "name": "revoked_credential_schema_mismatch_no_command_proposal",
+      "credential_state": "revoked",
+      "schema_validation_status": "invalid",
+      "expected": "no_command_proposal"
+    }
+  ],
+  "version": "0.14.3"
+}

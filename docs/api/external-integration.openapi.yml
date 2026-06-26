@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: Spreadsheet-Native ERP External Integration API
+  version: 0.14.2
+security:
+  - OAuth2ClientCredentials: []
+  - WebhookSignature: []
+components:
+  securitySchemes:
+    OAuth2ClientCredentials:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.invalid/oauth/token
+          scopes: {}
+    WebhookSignature:
+      type: apiKey
+      in: header
+      name: X-ERP-Signature
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        errorCode: { type: string }
+    StageImportRequest:
+      type: object
+      required: [externalOperationId, idempotencyKey, objectType, schemaKey, schemaVersion, payload]
+      properties:
+        externalOperationId: { type: string }
+        idempotencyKey: { type: string }
+        objectType: { type: string }
+        schemaKey: { type: string }
+        schemaVersion: { type: integer, minimum: 1 }
+        contentType: { type: string, default: application/json }
+        payload: { type: object }
+    StageImportResponse:
+      type: object
+      required: [integrationImportId, validationStatus, payloadHash]
+      properties:
+        integrationImportId: { type: string, format: uuid }
+        validationStatus: { type: string, enum: [received, validated, rejected, needs_review, command_created, dead_lettered] }
+        malwareScanStatus: { type: string, enum: [pending, clean, quarantined, failed, skipped_not_allowed] }
+        schemaValidationStatus: { type: string, enum: [pending, valid, invalid, failed] }
+        payloadHash: { type: string }
+        proposedCommandId: { type: string, format: uuid }
+paths:
+  /api/v1/integrations/{connectionId}/imports:
+    post:
+      summary: Stage an inbound external payload as a command proposal candidate
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StageImportRequest' }
+      responses:
+        '202': { description: Staged, rejected, or command proposal created after scan and schema validation }
+        '400': { description: Schema or content validation failed }
+        '401': { description: Authentication failed }
+        '403': { description: Service account scope or classification ceiling denied }
+        '409': { description: Integration idempotency conflict }
+        '413': { description: Payload exceeds max_payload_bytes }
+        '415': { description: Unsupported content type }
+        '429': { description: Per-connection or service-account rate limit exceeded }
+webhooks:
+  erpEventDelivery:
+    post:
+      summary: Outbound event delivery to approved integration sink
+      parameters:
+        - name: X-ERP-Signature
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        '202': { description: Accepted }
+        '401': { description: Signature failed }
+        '409': { description: Same event ID with different payload hash }

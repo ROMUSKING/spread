@@ -1,0 +1,36 @@
+asyncapi: 3.0.0
+info:
+  title: Spreadsheet-Native ERP External Event API
+  version: 0.14.2
+defaultContentType: application/cloudevents+json
+channels:
+  tenantEvents:
+    address: tenants/{tenantId}/events
+    messages:
+      erpEvent:
+        $ref: '#/components/messages/ErpEvent'
+components:
+  messages:
+    ErpEvent:
+      headers:
+        type: object
+        required: [Idempotency-Key, X-ERP-Signature, X-ERP-Schema-Version]
+        properties:
+          Idempotency-Key: { type: string }
+          X-ERP-Signature: { type: string }
+          X-ERP-Schema-Version: { type: string }
+          X-ERP-Data-Classification: { type: string }
+          X-ERP-Permission-Scope-Hash: { type: string }
+          X-ERP-Payload-Hash: { type: string }
+      payload:
+        type: object
+        required: [id, source, type, specversion, time, dataschema, data]
+        properties:
+          specversion: { type: string, const: '1.0' }
+          id: { type: string, format: uuid }
+          source: { type: string }
+          type: { type: string }
+          subject: { type: string }
+          time: { type: string, format: date-time }
+          dataschema: { type: string }
+          data: { type: object }
