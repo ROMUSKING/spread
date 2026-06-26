@@ -10,12 +10,12 @@ export type SubmitCommandRequest<TPayload = unknown> = {
 export type SubmitCommandResponse<TBody = unknown> = {
   commandId: string;
   status: CommandStatus;
-  body?: TBody;
-  problem?: { code: string; message: string };
+  body?: TBody | undefined;
+  problem?: { code: string; message: string } | undefined;
 };
 
 export type CommandStatusResponse<TBody = unknown> = SubmitCommandResponse<TBody> & {
   createdAt: string;
-  committedAt?: string;
+  committedAt?: string | undefined;
   expiresAt: string;
 };

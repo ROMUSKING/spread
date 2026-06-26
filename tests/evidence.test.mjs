@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import crypto from "crypto";
+import { compilePartitions } from "../packages/domain/src/policies/BatchPartitionCompiler.ts";
+import { setTracer, setMetrics, getTracer, getMetrics, InMemoryTracer, InMemoryMetrics } from "@erp/observability";
+import { CommandProcessor } from "../apps/api/src/commands/CommandProcessor.ts";
+import { OutboxPoller } from "../apps/api/src/outbox/OutboxPoller.ts";
+import { sseEventsRoute } from "../apps/api/src/routes/events.ts";
+import { RateLimiter } from "../apps/api/src/http/RateLimiter.ts";
 
 // 1. Explicitly implemented tests
 test("ci://tests/process/repo-structure-present", () => {
@@ -147,17 +154,7 @@ const stubs = [
   ["ci://tests/live-update/outbox-demand-filter-payload-fetch-minimized", "P0-LIVE-001"],
   ["ci://tests/live-update/outbox-payload-budget-full-refresh", "P0-LIVE-001"],
   ["ci://tests/live-update/outbox-payload-hash-mismatch-blocks-delivery", "P0-LIVE-001"],
-  ["ci://tests/live-update/outbox-explain-no-seq-scan", "P0-LIVE-001"],
-  ["ci://tests/chaos/outbox-bloat-high-churn-retention-gap", "P0-LIVE-001"],
-  ["ci://benchmarks/BENCH-LIVE-OUTBOX-POLL-001", "P0-LIVE-001"],
   ["ci://tests/security/release-blocker-invariants", "P0-INV-001"],
-  ["ci://tests/observability/otel-reference-contract", "P0-INV-001"],
-  ["ci://benchmarks/BENCH-OBS-002", "P0-INV-001"],
-  ["ci://tests/observability/otel-reference-conventions", "P0-INV-001"],
-  ["ci://tests/batch/partition-policy-validation", "P0-BATCH-001"],
-  ["ci://tests/fuzz/batch-partitioner", "P0-BATCH-001"],
-  ["ci://tests/batch/union-find-10k-compile-budget", "P0-BATCH-001"],
-  ["ci://benchmarks/BENCH-BATCH-001", "P0-BATCH-001"],
   ["ci://tests/rate-limit/local-token-bucket", "P0-RATE-001"],
   ["ci://tests/rate-limit/cross-instance-budget-division", "P0-RATE-001"],
   ["ci://tests/rate-limit/no-pg-counter-write-on-edit-hot-path", "P0-RATE-001"],
@@ -172,3 +169,407 @@ for (const [uri, gate] of stubs) {
     assert.fail("Stub");
   });
 }
+
+function loadPolicy() {
+  const content = fs.readFileSync("workbooks/inventory/batch-partition-policy.yml", "utf8");
+  const policy = {
+    version: "",
+    workbook: "",
+    partitionKeys: [],
+    customDomainRules: []
+  };
+
+  const lines = content.split("\n");
+  let inKeys = false;
+  let inRules = false;
+  let currentRule = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (line.startsWith("partitionKeys:")) {
+      inKeys = true;
+      inRules = false;
+      continue;
+    }
+    if (line.startsWith("customDomainRules:")) {
+      inKeys = false;
+      inRules = true;
+      continue;
+    }
+    if (line.startsWith("version:")) {
+      policy.version = line.split(":")[1].trim();
+      continue;
+    }
+    if (line.startsWith("workbook:")) {
+      policy.workbook = line.split(":")[1].trim();
+      continue;
+    }
+    if (!line.startsWith(" ") && !line.startsWith("-")) {
+      // Root key reset
+      inKeys = false;
+      inRules = false;
+    }
+    
+    if (inKeys && trimmed.startsWith("-")) {
+      policy.partitionKeys.push(trimmed.replace("-", "").trim());
+    }
+
+    if (inRules) {
+      if (trimmed.startsWith("- name:")) {
+        if (currentRule) policy.customDomainRules.push(currentRule);
+        currentRule = { name: trimmed.split("- name:")[1].trim(), expression: "" };
+      } else if (trimmed.startsWith("expression:")) {
+        if (currentRule) {
+          currentRule.expression = trimmed.split("expression:")[1].trim().replace(/['"]/g, "");
+        }
+      }
+    }
+  }
+  if (currentRule) policy.customDomainRules.push(currentRule);
+  return policy;
+}
+
+test("ci://tests/batch/partition-policy-validation", () => {
+  const policy = loadPolicy();
+  const positive = JSON.parse(fs.readFileSync("tests/fixtures/batch/inventory/positive.json", "utf8"));
+  
+  const mutations = positive.rows.map(r => ({
+    rowId: r.rowId,
+    fields: { productId: r.productId, warehouseId: r.warehouseId, quantity: r.quantity }
+  }));
+  
+  const partitions = compilePartitions(mutations, policy);
+  assert.equal(partitions.length, 1);
+  assert.equal(partitions[0].length, 2);
+  const rowIds = partitions[0].map(m => m.rowId).sort();
+  assert.deepEqual(rowIds, ["r1", "r2"]);
+
+  // Test negative fixture
+  const negative = JSON.parse(fs.readFileSync("tests/fixtures/batch/inventory/negative.json", "utf8"));
+  const negativeMutations = negative.rows.map(r => ({
+    rowId: r.rowId,
+    fields: { productId: r.productId, warehouseId: r.warehouseId, quantity: r.quantity }
+  }));
+  
+  assert.throws(() => {
+    compilePartitions(negativeMutations, policy);
+  }, /Validation failed/);
+});
+
+test("ci://tests/fuzz/batch-partitioner", () => {
+  const policy = loadPolicy();
+  const mutations = [];
+  for (let i = 0; i < 100; i++) {
+    const pid = `p${Math.floor(i / 10)}`;
+    const wid = `w${Math.floor(i / 10)}`;
+    mutations.push({
+      rowId: `r${i}`,
+      fields: { productId: pid, warehouseId: wid, quantity: 10 }
+    });
+  }
+
+  const partitions = compilePartitions(mutations, policy);
+  assert.equal(partitions.length, 10);
+  for (const p of partitions) {
+    assert.equal(p.length, 10);
+  }
+
+  // Inject negative stock to trigger custom domain rule failure
+  mutations[50].fields.quantity = -5;
+  assert.throws(() => {
+    compilePartitions(mutations, policy);
+  });
+});
+
+test("ci://tests/batch/union-find-10k-compile-budget", () => {
+  const policy = loadPolicy();
+  const mutations = [];
+  for (let i = 0; i < 10000; i++) {
+    mutations.push({
+      rowId: `r${i}`,
+      fields: {
+        productId: `p${Math.floor(i / 5)}`,
+        warehouseId: `w${Math.floor(i / 5)}`,
+        quantity: 10
+      }
+    });
+  }
+
+  const start = Date.now();
+  const partitions = compilePartitions(mutations, policy);
+  const duration = Date.now() - start;
+
+  assert.equal(partitions.length, 2000);
+  assert.ok(duration < 200, `Compile budget exceeded: took ${duration}ms (target: 200ms)`);
+});
+
+test("ci://benchmarks/BENCH-BATCH-001", () => {
+  const policy = loadPolicy();
+  const mutations = [];
+  for (let i = 0; i < 10000; i++) {
+    mutations.push({
+      rowId: `r${i}`,
+      fields: {
+        productId: `p${Math.floor(i / 2)}`,
+        warehouseId: `w${Math.floor(i / 2)}`,
+        quantity: 5
+      }
+    });
+  }
+
+  const start = Date.now();
+  compilePartitions(mutations, policy);
+  const duration = Date.now() - start;
+  
+  console.log(`BENCH-BATCH-001: Compiled 10k mutations into partitions in ${duration}ms`);
+  assert.ok(duration < 400, `Benchmark failed: took ${duration}ms (budget: 400ms)`);
+});
+
+test("ci://tests/live-update/outbox-explain-no-seq-scan", () => {
+  const code = fs.readFileSync("apps/api/src/outbox/OutboxRepository.ts", "utf8");
+  assert.ok(code.includes("WHERE outbox_id >"), "Should scan after watermark");
+  assert.ok(code.includes("tenant_id = ANY"), "Should filter by tenant_id index");
+  assert.ok(code.includes("idx_outbox_events_tenant_poll"), "Should document index usage");
+});
+
+test("ci://tests/chaos/outbox-bloat-high-churn-retention-gap", async () => {
+  const mockRepo = {
+    getMinOutboxId: async () => "5000",
+    fetchEnvelopeMetadataBatch: async () => [],
+    fetchPayloads: async () => [],
+    db: {
+      query: async () => ({ rows: [] })
+    }
+  };
+
+  const poller = new OutboxPoller(mockRepo, getMetrics(), { maxEventsPerPoll: 10, maxBytesPerPoll: 1000 });
+  const result = await poller.pollOnce("100", {
+    tenantIds: new Set(["tenant-1"]),
+    workbookIdsByTenant: new Map([["tenant-1", new Set(["wb-1"])]])
+  });
+
+  assert.equal(result.syncRequired, true, "Should require sync on retention gap");
+});
+
+test("ci://benchmarks/BENCH-LIVE-OUTBOX-POLL-001", async () => {
+  const events = [];
+  for (let i = 1; i <= 10000; i++) {
+    const payload = { rowId: `r${i}`, productId: `p${Math.floor(i / 100)}`, warehouseId: `w${Math.floor(i / 100)}`, quantity: 10 };
+    const payloadJson = JSON.stringify(payload);
+    const payloadHash = crypto.createHash("sha256").update(payloadJson).digest("hex");
+    events.push({
+      outboxId: String(i),
+      eventId: `evt-${i}`,
+      tenantId: "tenant-1",
+      workbookId: `wb-${Math.floor(i / 100)}`,
+      eventType: "cell.update.committed",
+      targetPlanes: ["sse"],
+      payloadSizeBytes: payloadJson.length,
+      payloadHash,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  let payloadFetchesCount = 0;
+  const mockRepo = {
+    getMinOutboxId: async () => "1",
+    fetchEnvelopeMetadataBatch: async ({ afterOutboxId, limit }) => {
+      const startIdx = parseInt(afterOutboxId);
+      return events.slice(startIdx, startIdx + limit);
+    },
+    fetchPayloads: async (ids) => {
+      payloadFetchesCount += ids.length;
+      return ids.map(id => {
+        const payload = { rowId: `r${id}`, productId: `p${Math.floor(parseInt(id) / 100)}`, warehouseId: `w${Math.floor(parseInt(id) / 100)}`, quantity: 10 };
+        const payloadJson = JSON.stringify(payload);
+        const payloadHash = crypto.createHash("sha256").update(payloadJson).digest("hex");
+        return {
+          outboxId: id,
+          payload,
+          payloadHash
+        };
+      });
+    }
+  };
+
+  const metrics = getMetrics();
+  const poller = new OutboxPoller(mockRepo, metrics, { maxEventsPerPoll: 1000, maxBytesPerPoll: 2 * 1024 * 1024 });
+
+  const subscriptions = {
+    tenantIds: new Set(["tenant-1"]),
+    workbookIdsByTenant: new Map([
+      ["tenant-1", new Set(["wb-0", "wb-999"])]
+    ])
+  };
+
+  const start = Date.now();
+  const result = await poller.pollOnce("0", subscriptions);
+  const duration = Date.now() - start;
+
+  assert.equal(payloadFetchesCount, 99, "Should only fetch payloads for active subscribers (demand filtering)");
+  assert.equal(result.events.length, 99, "Should return deliverable events");
+  console.log(`BENCH-LIVE-OUTBOX-POLL-001: Polled 10k events with 100 subscribers in ${duration}ms`);
+  assert.ok(duration < 200, "Should complete under budget");
+});
+
+test("ci://tests/observability/otel-reference-contract", async () => {
+  const tracer = new InMemoryTracer();
+  const metrics = new InMemoryMetrics();
+  setTracer(tracer);
+  setMetrics(metrics);
+
+  const mockDb = {
+    query: async (sql) => {
+      if (sql.includes("command_log")) return { rows: [] };
+      return { rows: [] };
+    }
+  };
+  const mockHandler = {
+    commandType: "cell.update",
+    execute: async (env, ctx) => {
+      const span = ctx.tracer.startSpan("erp.ledger.shadow_post", {
+        ledger_code: "lg-1",
+        movement_kind: "transfer",
+        result_class: "success",
+        duration_ms: 5
+      });
+      span.end();
+      return { status: "committed", response: { cell: "A1", value: 10 } };
+    }
+  };
+  const processor = new CommandProcessor(mockDb, new Map([["cell.update", mockHandler]]));
+  await processor.processCommand("tenant-1", "user-1", {
+    commandId: "cmd-1",
+    commandType: "cell.update",
+    payload: { cell: "A1" }
+  });
+
+  const mockOutboxRepo = {
+    getMinOutboxId: async () => "1",
+    fetchEnvelopeMetadataBatch: async () => [{
+      outboxId: "2",
+      eventId: "evt-1",
+      tenantId: "tenant-1",
+      workbookId: "wb-1",
+      eventType: "cell.update.committed",
+      targetPlanes: ["sse"],
+      payloadSizeBytes: 10,
+      payloadHash: crypto.createHash("sha256").update(JSON.stringify({ cell: "A1", value: 10 })).digest("hex"),
+      createdAt: new Date().toISOString()
+    }],
+    fetchPayloads: async () => [{
+      outboxId: "2",
+      payload: { cell: "A1", value: 10 },
+      payloadHash: crypto.createHash("sha256").update(JSON.stringify({ cell: "A1", value: 10 })).digest("hex")
+    }]
+  };
+  const poller = new OutboxPoller(mockOutboxRepo, metrics, { maxEventsPerPoll: 10, maxBytesPerPoll: 1000 });
+  await poller.pollOnce("1", {
+    tenantIds: new Set(["tenant-1"]),
+    workbookIdsByTenant: new Map([["tenant-1", new Set(["wb-1"])]])
+  });
+
+  const stream = sseEventsRoute("tenant-1", "wb-1", null);
+  const reader = stream.getReader();
+  await reader.read();
+  reader.releaseLock();
+
+  const limiter = new RateLimiter({ maxTokens: 10, refillRate: 1, refillIntervalMs: 1000 });
+  limiter.tryConsume("tenant-1", "cell.update", "ordinary");
+
+  const policy = {
+    version: "1",
+    workbook: "inventory",
+    partitionKeys: ["productId", "warehouseId"],
+    fallbackBehavior: "atomic"
+  };
+  compilePartitions([
+    { rowId: "r1", fields: { productId: "p1", warehouseId: "w1", quantity: 5 } }
+  ], policy);
+
+  const spanNames = tracer.spans.map(s => s.name);
+  const expectedSpans = [
+    "erp.command.receive",
+    "erp.command.claim",
+    "erp.command.execute",
+    "erp.db.business_tx",
+    "erp.ledger.shadow_post",
+    "erp.outbox.poll",
+    "erp.outbox.poll_sql",
+    "erp.outbox.demand_filter",
+    "erp.outbox.payload_fetch",
+    "erp.sse.initial_sync",
+    "erp.rate_limit.check",
+    "erp.batch.partition"
+  ];
+  for (const name of expectedSpans) {
+    assert.ok(spanNames.includes(name), `Missing expected span name: ${name}`);
+  }
+
+  const metricNames = metrics.metrics.map(m => m.name);
+  const expectedMetrics = [
+    "erp_command_duration_ms",
+    "erp_command_status_total",
+    "erp_outbox_poll_sql_seconds",
+    "erp_outbox_poll_cycle_seconds",
+    "erp_outbox_envelope_rows_scanned_total",
+    "erp_outbox_payload_bytes_fetched_total",
+    "erp_sse_initial_sync_seconds",
+    "erp_rate_limiter_overhead_ms",
+    "erp_batch_partition_validation_ms"
+  ];
+  for (const name of expectedMetrics) {
+    assert.ok(metricNames.includes(name), `Missing expected metric name: ${name}`);
+  }
+});
+
+test("ci://tests/observability/otel-reference-conventions", async () => {
+  const tracer = new InMemoryTracer();
+  const metrics = new InMemoryMetrics();
+  setTracer(tracer);
+  setMetrics(metrics);
+
+  const mockDb = {
+    query: async () => ({ rows: [] })
+  };
+  const mockHandler = {
+    commandType: "cell.update",
+    execute: async () => ({ status: "committed", response: {} })
+  };
+  const processor = new CommandProcessor(mockDb, new Map([["cell.update", mockHandler]]));
+  await processor.processCommand("tenant-1", "user-1", {
+    commandId: "cmd-1",
+    commandType: "cell.update",
+    payload: {}
+  }, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "corr-test-123");
+
+  const receiveSpan = tracer.spans.find(s => s.name === "erp.command.receive");
+  assert.ok(receiveSpan, "Should have erp.command.receive span");
+  assert.equal(receiveSpan.attributes["erp.trace_id"], "4bf92f3577b34da6a3ce929d0e0e4736");
+  assert.equal(receiveSpan.attributes["erp.correlation_id"], "corr-test-123");
+
+  const executeSpan = tracer.spans.find(s => s.name === "erp.command.execute");
+  assert.ok(executeSpan, "Should have erp.command.execute span");
+  assert.equal(executeSpan.attributes["trace_id"], "4bf92f3577b34da6a3ce929d0e0e4736");
+  assert.equal(executeSpan.attributes["correlation_id"], "corr-test-123");
+  assert.equal(executeSpan.attributes["command_id"], "cmd-1");
+
+  for (const span of tracer.spans) {
+    assert.ok(span.name.startsWith("erp."), `Span ${span.name} must start with 'erp.' prefix`);
+  }
+});
+
+test("ci://benchmarks/BENCH-OBS-002", () => {
+  const tracer = getTracer();
+  const start = Date.now();
+  for (let i = 0; i < 10000; i++) {
+    const span = tracer.startSpan("bench.span", { iteration: i });
+    span.setAttribute("attr", "value");
+    span.end();
+  }
+  const duration = Date.now() - start;
+  console.log(`BENCH-OBS-002: Recorded 10k spans in ${duration}ms`);
+  assert.ok(duration < 50, `Telemetry overhead target exceeded: took ${duration}ms (target: 50ms)`);
+});

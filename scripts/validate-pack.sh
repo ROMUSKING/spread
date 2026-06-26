@@ -45,7 +45,7 @@ if find apps packages -type d -name dist | grep -q .; then find apps packages -t
 if find apps packages -type f \( -name '*.d.ts' -o -name '*.tsbuildinfo' -o -path '*/src/*.js' -o -path '*/src/*.js.map' \) | grep -q .; then find apps packages -type f \( -name '*.d.ts' -o -name '*.tsbuildinfo' -o -path '*/src/*.js' -o -path '*/src/*.js.map' \) >&2; fail "Generated declaration, emitted source JS, source maps, or tsbuildinfo files are not allowed in source pack"; fi
 pass
 
-python - <<'PYVALID'
+python3 - <<'PYVALID'
 from pathlib import Path
 import re, sys, yaml, json
 

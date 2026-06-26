@@ -22,6 +22,15 @@
     "smoke:package-tests": "bash scripts/smoke-package-tests.sh"
   },
   "devDependencies": {
+    "@erp/config": "workspace:*",
+    "@erp/contracts": "workspace:*",
+    "@erp/db": "workspace:*",
+    "@erp/domain": "workspace:*",
+    "@erp/observability": "workspace:*",
+    "@erp/testkit": "workspace:*",
+    "@erp/ui": "workspace:*",
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7",
     "typescript": "^5.0.0"
   }
 }

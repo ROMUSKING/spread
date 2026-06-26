@@ -1,0 +1,185 @@
+/**
+ * useSseSubscription — AGENT-013
+ *
+ * React hook for managing SSE live-update subscriptions.
+ * Establishes a connection to /api/events, parses the SSE stream,
+ * supports Last-Event-ID for resume, tracks connection state,
+ * and automatically reconnects with exponential backoff.
+ *
+ * @see docs/dev/outbox-polling-reader.md
+ */
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { OutboxEnvelope } from "@erp/contracts/events";
+
+export type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected";
+
+export type UseSseSubscriptionResult = {
+  connectionState: ConnectionState;
+  lastEventId: string | null;
+  events: OutboxEnvelope[];
+};
+
+/**
+ * React hook for SSE subscription with auto-reconnection and event parsing.
+ *
+ * @param tenantId Active tenant ID
+ * @param workbookId Active workbook ID
+ * @param onSyncRequired Callback when retention gap or error forces a full refresh
+ */
+export function useSseSubscription(
+  tenantId: string,
+  workbookId: string,
+  onSyncRequired: () => void
+): UseSseSubscriptionResult {
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
+  const [events, setEvents] = useState<OutboxEnvelope[]>([]);
+  const [lastEventId, setLastEventId] = useState<string | null>(null);
+
+  const lastEventIdRef = useRef<string | null>(null);
+  const reconnectAttemptRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const onSyncRequiredRef = useRef(onSyncRequired);
+
+  // Keep callback ref updated to avoid re-triggering effect
+  useEffect(() => {
+    onSyncRequiredRef.current = onSyncRequired;
+  }, [onSyncRequired]);
+
+  const connect = useCallback(() => {
+    // Clean up any existing connection
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    const headers: Record<string, string> = {
+      Accept: "text/event-stream",
+    };
+    if (lastEventIdRef.current) {
+      headers["Last-Event-ID"] = lastEventIdRef.current;
+    }
+
+    const url = `/api/events?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`;
+
+    setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
+
+    fetch(url, {
+      headers,
+      signal: abortController.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`SSE HTTP error: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error("Response body is not readable");
+        }
+
+        // Successfully connected
+        setConnectionState("connected");
+        reconnectAttemptRef.current = 0; // reset reconnect attempts
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          // The last part might be incomplete, keep it in the buffer
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+
+            const lines = part.split("\n");
+            let eventType = "message";
+            let data = "";
+            let id = "";
+
+            for (const line of lines) {
+              if (line.startsWith("id: ")) {
+                id = line.slice(4).trim();
+              } else if (line.startsWith("event: ")) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                data = line.slice(6).trim();
+              }
+            }
+
+            if (id) {
+              lastEventIdRef.current = id;
+              setLastEventId(id);
+            }
+
+            if (eventType === "SYNC_REQUIRED") {
+              onSyncRequiredRef.current();
+              // Gap detected, client will perform a full sync. Close connection.
+              abortController.abort();
+              setConnectionState("disconnected");
+              return;
+            }
+
+            if (eventType === "connected") {
+              // Parse base high watermark metadata if present
+              continue;
+            }
+
+            if (data) {
+              try {
+                const parsedEvent = JSON.parse(data) as OutboxEnvelope;
+                setEvents((prev) => {
+                  // Deduplicate based on eventId
+                  if (prev.some((e) => e.eventId === parsedEvent.eventId)) {
+                    return prev;
+                  }
+                  return [...prev, parsedEvent];
+                });
+              } catch (e) {
+                console.error("Failed to parse SSE event data:", e);
+              }
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name === "AbortError") {
+          return; // Intentionally aborted
+        }
+
+        console.error("SSE connection error:", err);
+        setConnectionState("disconnected");
+
+        // Schedule reconnection with exponential backoff: 1s, 2s, 4s, up to 30s
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+        reconnectAttemptRef.current += 1;
+
+        setTimeout(() => {
+          if (abortController.signal.aborted) return;
+          connect();
+        }, delay);
+      });
+  }, [tenantId, workbookId]);
+
+  useEffect(() => {
+    connect();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [connect]);
+
+  return {
+    connectionState,
+    lastEventId,
+    events,
+  };
+}

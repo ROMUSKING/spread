@@ -3,7 +3,8 @@
   "compilerOptions": {
     "composite": true,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src/**/*.ts",
@@ -18,6 +19,12 @@
     },
     {
       "path": "../../packages/observability"
+    },
+    {
+      "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/config"
     }
   ]
 }

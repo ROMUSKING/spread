@@ -1,0 +1,48 @@
+{
+  "serviceAccount": {
+    "tenantId": "tenant-123",
+    "serviceAccountId": "sa-456",
+    "displayName": "Test SA",
+    "accountStatus": "active",
+    "allowedCommandTypes": ["cell.update"],
+    "allowedObjectTypes": ["workbook"],
+    "allowedEventTypes": [],
+    "dataClassificationMax": "confidential",
+    "revokedAt": null
+  },
+  "connection": {
+    "tenantId": "tenant-123",
+    "integrationConnectionId": "conn-789",
+    "serviceAccountId": "sa-456",
+    "providerKey": "shopify",
+    "connectionName": "Shopify Sync",
+    "connectionType": "webhook",
+    "connectionStatus": "active",
+    "credentialRef": "kms://secret-key-ref",
+    "credentialRotationState": "current",
+    "allowedObjectTypes": ["workbook"],
+    "allowedEventTypes": [],
+    "allowedContentTypes": ["application/json"],
+    "maxPayloadBytes": 1000000,
+    "dataClassificationMax": "confidential",
+    "revokedAt": null
+  },
+  "payload": {
+    "tenantId": "tenant-123",
+    "integrationImportId": "imp-111",
+    "integrationConnectionId": "conn-789",
+    "externalOperationId": "op-222",
+    "idempotencyKey": "idem-333",
+    "objectType": "workbook",
+    "proposedCommandType": "cell.update",
+    "payloadHash": "sha-444",
+    "payloadSizeBytes": 500,
+    "contentType": "application/json",
+    "schemaKey": "workbook-schema",
+    "schemaVersion": 1,
+    "malwareScanStatus": "clean",
+    "schemaValidationStatus": "valid",
+    "validationStatus": "validated",
+    "dataClassification": "internal"
+  }
+}

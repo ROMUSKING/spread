@@ -15,9 +15,15 @@ export function getCommandProcessor(): CommandProcessor {
   return globalProcessor;
 }
 
-export async function submitCommand(tenantId: string, userId: string, request: SubmitCommandRequest): Promise<SubmitCommandResponse> {
+export async function submitCommand(
+  tenantId: string,
+  userId: string,
+  request: SubmitCommandRequest,
+  traceparent?: string | null,
+  correlationId?: string | null
+): Promise<SubmitCommandResponse> {
   const processor = getCommandProcessor();
-  return processor.processCommand(tenantId, userId, request);
+  return processor.processCommand(tenantId, userId, request, traceparent, correlationId);
 }
 
 export async function getCommandStatusRoute(tenantId: string, commandId: string): Promise<CommandStatusResponse | null> {

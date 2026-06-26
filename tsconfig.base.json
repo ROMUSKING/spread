@@ -16,6 +16,7 @@
       "@erp/domain/*": ["packages/domain/src/*"],
       "@erp/db/*": ["packages/db/src/*"],
       "@erp/contracts/*": ["packages/contracts/src/*"],
+      "@erp/observability": ["packages/observability/src/index.ts"],
       "@erp/observability/*": ["packages/observability/src/*"],
       "@erp/config/*": ["packages/config/src/*"],
       "@erp/ui/*": ["packages/ui/src/*"],

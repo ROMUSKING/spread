@@ -1,0 +1,20 @@
+version: 0.16.1
+workbook: inventory
+partitionKeys:
+  - productId
+  - warehouseId
+foreignKeys:
+  - field: productId
+    references: products.id
+  - field: warehouseId
+    references: warehouses.id
+formulaReferences:
+  - field: totalValue
+    dependsOn:
+      - quantity
+      - unit_price
+aggregateDependencies: []
+customDomainRules:
+  - name: positiveStock
+    expression: "quantity >= 0"
+fallbackBehavior: reject

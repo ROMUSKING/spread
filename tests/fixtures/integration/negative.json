@@ -1,0 +1,72 @@
+{
+  "malwareScanFailure": {
+    "payload": {
+      "malwareScanStatus": "quarantined"
+    }
+  },
+  "schemaValidationFailure": {
+    "payload": {
+      "schemaValidationStatus": "invalid"
+    }
+  },
+  "sizeLimitExceeded": {
+    "payload": {
+      "payloadSizeBytes": 2000000
+    }
+  },
+  "contentTypeNotAllowed": {
+    "payload": {
+      "contentType": "text/plain"
+    }
+  },
+  "commandNotAllowed": {
+    "payload": {
+      "proposedCommandType": "cell.delete"
+    }
+  },
+  "objectNotAllowed": {
+    "payload": {
+      "objectType": "invoice"
+    }
+  },
+  "classificationCeilingBreach": {
+    "payload": {
+      "dataClassification": "regulated"
+    }
+  },
+  "connectionRevoked": {
+    "connection": {
+      "revokedAt": "2026-06-27T00:00:00Z"
+    }
+  },
+  "connectionInactive": {
+    "connection": {
+      "connectionStatus": "revoked"
+    }
+  },
+  "serviceAccountRevoked": {
+    "serviceAccount": {
+      "revokedAt": "2026-06-27T00:00:00Z"
+    }
+  },
+  "serviceAccountInactive": {
+    "serviceAccount": {
+      "accountStatus": "revoked"
+    }
+  },
+  "credentialRotationExpired": {
+    "connection": {
+      "credentialRotationState": "expired"
+    }
+  },
+  "plaintextSecretInRef": {
+    "connection": {
+      "credentialRef": "kms://secret-key-ref?token=secret123"
+    }
+  },
+  "rawCredentialRef": {
+    "connection": {
+      "credentialRef": "my-raw-api-token-value"
+    }
+  }
+}

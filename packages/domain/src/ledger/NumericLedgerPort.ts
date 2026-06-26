@@ -35,10 +35,16 @@ export interface NumericLedgerPort {
 }
 
 export class PostgresMvpNumericLedgerAdapter implements NumericLedgerPort {
+  private readonly tenantId: string;
+  private readonly tx: { query: (sql: string, params?: readonly unknown[]) => Promise<unknown> };
+
   constructor(
-    private readonly tenantId: string,
-    private readonly tx: { query: (sql: string, params?: readonly unknown[]) => Promise<unknown> }
-  ) {}
+    tenantId: string,
+    tx: { query: (sql: string, params?: readonly unknown[]) => Promise<unknown> }
+  ) {
+    this.tenantId = tenantId;
+    this.tx = tx;
+  }
 
   async createTransfer(draft: NumericTransferDraft): Promise<NumericLedgerResult> {
     if (draft.debitAccountIdDec === draft.creditAccountIdDec) {
