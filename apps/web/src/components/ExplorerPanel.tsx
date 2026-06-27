@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EMPTY_STATE_COPY } from "../lib/emptyStateCopy";
 
 export interface WorkspaceNode {
   id: string;
@@ -17,23 +18,30 @@ export interface WorkspaceEdge {
 interface ExplorerPanelProps {
   nodes: WorkspaceNode[];
   edges: WorkspaceEdge[];
+  allowedWorkbookIds: string[];
   onSelectWorkbook: (workbookId: string) => void;
   activeWorkbookId?: string;
   onAddWorkbook: (label: string, categoryId: string) => void;
   onAddCategory: (label: string) => void;
 }
 
+function activateOnKey(e: React.KeyboardEvent, action: () => void) {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    action();
+  }
+}
+
 export function ExplorerPanel({
   nodes,
   edges,
+  allowedWorkbookIds,
   onSelectWorkbook,
   activeWorkbookId,
   onAddWorkbook,
   onAddCategory,
 }: ExplorerPanelProps) {
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    all: true,
-  });
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [newWorkbookName, setNewWorkbookName] = useState<Record<string, string>>({});
   const [newCategoryName, setNewCategoryName] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
@@ -43,18 +51,18 @@ export function ExplorerPanel({
   const workbooks = nodes.filter((n) => n.kind === "workbook");
 
   const toggleFolder = (folderId: string) => {
-    setExpandedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+    setExpandedFolders((prev) => ({ ...prev, [folderId]: !(prev[folderId] ?? true) }));
   };
 
-  // Get workbooks inside a category based on "contains" edges
   const getWorkbooksInFolder = (categoryId: string) => {
     const childIds = edges
       .filter((e) => e.source === categoryId && e.label === "contains")
       .map((e) => e.target);
-    return workbooks.filter((wb) => childIds.includes(wb.id));
+    return workbooks.filter(
+      (wb) => childIds.includes(wb.id) && allowedWorkbookIds.includes(wb.id)
+    );
   };
 
-  // Get inter-workbook relationship links
   const getRelatedWorkbooks = (workbookId: string) => {
     return edges
       .filter((e) => e.source === workbookId && e.label !== "contains")
@@ -88,163 +96,112 @@ export function ExplorerPanel({
   };
 
   return (
-    <div
-      style={{
-        padding: "16px",
-        height: "100%",
-        overflowY: "auto",
-        fontFamily: "'Inter', sans-serif",
-        color: "#cbd5e1",
-        fontSize: "13px",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#f8fafc" }}>
-          Module Navigator (Graph Explorer)
-        </h3>
-        <button
-          onClick={() => setAddingCategory(true)}
-          style={{
-            background: "rgba(59, 130, 246, 0.2)",
-            border: "1px solid rgba(59, 130, 246, 0.4)",
-            color: "#60a5fa",
-            borderRadius: "4px",
-            padding: "2px 8px",
-            fontSize: "11px",
-            cursor: "pointer",
-            fontWeight: 500,
-          }}
-        >
-          + Category
+    <div className="panel-body" role="tree" aria-label="Workbook navigator">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-lg)" }}>
+        <h3 className="panel-title">Navigator</h3>
+        <button type="button" className="btn btn--primary" onClick={() => setAddingCategory(true)}>
+          Add category
         </button>
       </div>
 
       {addingCategory && (
-        <div style={{ background: "rgba(255,255,255,0.03)", padding: "8px", borderRadius: "6px", marginBottom: "12px" }}>
+        <div
+          style={{
+            background: "var(--color-bg-muted)",
+            padding: "var(--space-sm)",
+            borderRadius: "var(--radius-sm)",
+            marginBottom: "var(--space-md)",
+          }}
+        >
           <input
             type="text"
-            placeholder="Category name..."
+            className="input input--sm"
+            placeholder="Category name"
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
-            style={{
-              width: "100%",
-              background: "rgba(0,0,0,0.5)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              color: "#fff",
-              fontSize: "12px",
-              marginBottom: "6px",
-            }}
+            style={{ marginBottom: "var(--space-sm)" }}
           />
-          <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
-            <button
-              onClick={() => setAddingCategory(false)}
-              style={{ background: "transparent", border: "none", color: "#64748b", fontSize: "11px", cursor: "pointer" }}
-            >
+          <div style={{ display: "flex", gap: "var(--space-sm)", justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn--ghost" onClick={() => setAddingCategory(false)}>
               Cancel
             </button>
-            <button
-              onClick={handleCreateCategory}
-              style={{
-                background: "#3b82f6",
-                border: "none",
-                borderRadius: "4px",
-                padding: "2px 8px",
-                color: "#fff",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
-            >
+            <button type="button" className="btn btn--primary" onClick={handleCreateCategory}>
               Create
             </button>
           </div>
         </div>
       )}
 
-      {/* Categories Folder List */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {categories.length === 0 && (
+        <div className="empty-state">
+          <p className="empty-state__title">{EMPTY_STATE_COPY.explorer.title}</p>
+          <p className="empty-state__hint">{EMPTY_STATE_COPY.explorer.hint}</p>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
         {categories.map((cat) => {
-          const isExpanded = expandedFolders[cat.id] ?? false;
+          const isExpanded = expandedFolders[cat.id] ?? true;
           const childSheets = getWorkbooksInFolder(cat.id);
 
           return (
-            <div key={cat.id} style={{ display: "flex", flexDirection: "column" }}>
+            <div key={cat.id} role="group">
               <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "6px 8px",
-                  background: "rgba(255,255,255,0.02)",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  userSelect: "none",
-                }}
+                className="tree-folder"
+                role="treeitem"
+                tabIndex={0}
+                aria-expanded={isExpanded}
                 onClick={() => toggleFolder(cat.id)}
+                onKeyDown={(e) => activateOnKey(e, () => toggleFolder(cat.id))}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 600 }}>
-                  <span style={{ color: isExpanded ? "#f59e0b" : "#94a3b8" }}>{isExpanded ? "📂" : "📁"}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", fontWeight: 600 }}>
+                  <span className={`tree-chevron ${isExpanded ? "tree-chevron--open" : ""}`} aria-hidden>
+                    ▸
+                  </span>
+                  <span className="folder-icon" aria-hidden />
                   <span>{cat.label}</span>
                 </div>
                 <button
+                  type="button"
+                  className="btn btn--ghost"
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowAddWb(showAddWb === cat.id ? null : cat.id);
                   }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "#94a3b8",
-                    cursor: "pointer",
-                    fontSize: "14px",
-                    padding: "0 4px",
-                  }}
-                  title="Add sheet"
+                  title="Add workbook"
+                  style={{ padding: "2px 6px", minWidth: 24 }}
                 >
                   +
                 </button>
               </div>
 
               {showAddWb === cat.id && (
-                <div style={{ padding: "6px 8px 6px 28px", display: "flex", gap: "6px" }}>
+                <div
+                  style={{
+                    padding: "var(--space-sm) var(--space-sm) var(--space-sm) 28px",
+                    display: "flex",
+                    gap: "var(--space-sm)",
+                  }}
+                >
                   <input
                     type="text"
-                    placeholder="Sheet name..."
+                    className="input input--sm"
+                    placeholder="Workbook name"
                     value={newWorkbookName[cat.id] || ""}
                     onChange={(e) => setNewWorkbookName({ ...newWorkbookName, [cat.id]: e.target.value })}
-                    style={{
-                      flex: 1,
-                      background: "rgba(0,0,0,0.5)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "4px",
-                      padding: "2px 6px",
-                      color: "#fff",
-                      fontSize: "11px",
-                    }}
+                    style={{ flex: 1 }}
                   />
-                  <button
-                    onClick={() => handleCreateWorkbook(cat.id)}
-                    style={{
-                      background: "#3b82f6",
-                      border: "none",
-                      borderRadius: "4px",
-                      padding: "2px 8px",
-                      color: "#fff",
-                      fontSize: "11px",
-                      cursor: "pointer",
-                    }}
-                  >
+                  <button type="button" className="btn btn--primary" onClick={() => handleCreateWorkbook(cat.id)}>
                     Add
                   </button>
                 </div>
               )}
 
               {isExpanded && (
-                <div style={{ paddingLeft: "24px", display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px" }}>
+                <div style={{ paddingLeft: "24px", display: "flex", flexDirection: "column", gap: "var(--space-xs)", marginTop: "var(--space-xs)" }}>
                   {childSheets.length === 0 && (
-                    <div style={{ color: "#64748b", fontStyle: "italic", fontSize: "11px", padding: "4px 8px" }}>
-                      Empty folder
+                    <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)", padding: "var(--space-xs) var(--space-sm)" }}>
+                      {EMPTY_STATE_COPY.explorer.folder}
                     </div>
                   )}
                   {childSheets.map((sheet) => {
@@ -255,27 +212,25 @@ export function ExplorerPanel({
                       <div
                         key={sheet.id}
                         style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          background: isActive ? "rgba(59, 130, 246, 0.08)" : "transparent",
-                          border: isActive ? "1px solid rgba(59, 130, 246, 0.2)" : "1px solid transparent",
-                          borderRadius: "4px",
-                          padding: "4px",
+                          border: isActive ? "1px solid var(--color-accent-muted)" : "1px solid transparent",
+                          borderRadius: "var(--radius-sm)",
+                          padding: "var(--space-xs)",
                         }}
                       >
                         <div
-                          onClick={() => onSelectWorkbook(sheet.id)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            padding: "4px 8px",
-                            cursor: "pointer",
-                            color: isActive ? "#60a5fa" : "#e2e8f0",
-                            fontWeight: isActive ? 600 : 400,
+                          className={`tree-item ${isActive ? "tree-item--active" : ""}`}
+                          role="treeitem"
+                          tabIndex={0}
+                          onClick={() => {
+                            if (allowedWorkbookIds.includes(sheet.id)) onSelectWorkbook(sheet.id);
                           }}
+                          onKeyDown={(e) =>
+                            activateOnKey(e, () => {
+                              if (allowedWorkbookIds.includes(sheet.id)) onSelectWorkbook(sheet.id);
+                            })
+                          }
                         >
-                          <span>📄</span>
+                          <span className="sheet-icon" aria-hidden />
                           <span>{sheet.label}</span>
                         </div>
 
@@ -283,36 +238,46 @@ export function ExplorerPanel({
                           <div
                             style={{
                               marginLeft: "24px",
-                              marginTop: "4px",
-                              paddingLeft: "8px",
-                              borderLeft: "1px dashed rgba(255,255,255,0.1)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "2px",
+                              marginTop: "var(--space-xs)",
+                              paddingLeft: "var(--space-sm)",
+                              borderLeft: "1px dashed var(--color-border)",
                             }}
                           >
-                            <div style={{ fontSize: "10px", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                              Linked modules:
+                            <div
+                              style={{
+                                fontSize: "var(--font-size-sm)",
+                                color: "var(--color-text-muted)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                                marginBottom: "var(--space-xs)",
+                              }}
+                            >
+                              Related
                             </div>
                             {related.map((link) => (
-                              <div
+                              <button
                                 key={link.edgeId}
-                                onClick={() => onSelectWorkbook(link.targetId)}
-                                style={{
-                                  fontSize: "11px",
-                                  color: "#a7f3d0",
-                                  cursor: "pointer",
-                                  padding: "2px 0",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: "4px",
+                                type="button"
+                                className="btn btn--ghost"
+                                onClick={() => {
+                                  if (allowedWorkbookIds.includes(link.targetId)) {
+                                    onSelectWorkbook(link.targetId);
+                                  }
                                 }}
                                 title={link.relation}
+                                style={{
+                                  display: "block",
+                                  width: "100%",
+                                  textAlign: "left",
+                                  fontSize: "var(--font-size-sm)",
+                                  padding: "2px 0",
+                                }}
                               >
-                                <span>🔗</span>
-                                <span style={{ textDecoration: "underline" }}>{link.label}</span>
-                                <span style={{ color: "#64748b", fontSize: "10px" }}>({link.relation})</span>
-                              </div>
+                                {link.label}
+                                <span style={{ color: "var(--color-text-muted)", marginLeft: 4 }}>
+                                  ({link.relation})
+                                </span>
+                              </button>
                             ))}
                           </div>
                         )}

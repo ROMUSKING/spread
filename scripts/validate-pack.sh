@@ -30,7 +30,7 @@ required_files=(
   "apps/api/package.json" "apps/web/package.json" "packages/domain/package.json" "packages/db/package.json" "packages/contracts/package.json" "packages/config/package.json" "packages/observability/package.json" "packages/testkit/package.json" "packages/ui/package.json"
   "apps/api/test/smoke.test.mjs" "apps/web/test/smoke.test.mjs" "packages/domain/test/smoke.test.mjs" "packages/db/test/smoke.test.mjs" "packages/contracts/test/smoke.test.mjs" "packages/config/test/smoke.test.mjs" "packages/observability/test/smoke.test.mjs" "packages/testkit/test/smoke.test.mjs" "packages/ui/test/smoke.test.mjs"
   "apps/api/src/commands/CommandHandlerBase.ts" "apps/api/src/outbox/OutboxPoller.ts" "apps/api/src/retrieval/RetrievalRevalidator.middleware.ts" "apps/api/src/routes/commands.ts" "apps/api/src/routes/events.ts" "apps/api/src/server.ts"
-  "apps/web/src/app/page.tsx" "apps/web/src/components/GridShell.tsx" "apps/web/src/lib/commandClient.ts"
+  "apps/web/src/app/page.tsx" "apps/web/src/app/layout.tsx" "apps/web/src/components/GridShell.tsx" "apps/web/src/components/AppPreferences.tsx" "apps/web/src/lib/commandClient.ts" "apps/web/src/lib/usePreferences.ts" "apps/web/src/lib/preferencesUtils.ts" "apps/web/src/lib/gridUtils.ts" "apps/web/src/lib/emptyStateCopy.ts" "apps/web/src/lib/workbookUtils.ts" "apps/web/src/lib/commandUtils.ts" "apps/web/src/styles/globals.css"
   "packages/domain/src/ledger/NumericLedgerPort.ts" "packages/domain/src/commands/types.ts" "packages/domain/src/types/ids.ts" "packages/db/src/transaction.ts" "packages/contracts/src/command-api.ts" "packages/contracts/src/events.ts" "packages/config/src/env.ts" "packages/observability/src/tracing.ts" "packages/testkit/src/evidence.ts" "packages/ui/src/index.ts"
   "docs/slo-baseline.yml" "tests/manifest.yml" "invariants/security-invariants.yml" "invariants/sql/aud-001-command-audit-domain-outbox-correlation.sql"
 )
@@ -133,7 +133,8 @@ for path, name in [('apps/api/package.json','@erp/api'),('apps/web/package.json'
     pkg=json.loads(Path(path).read_text())
     if pkg.get('name') != name or pkg.get('version') != VERSION:
         print(f'{path} name/version mismatch', file=sys.stderr); sys.exit(1)
-    if pkg.get('scripts',{}).get('test') != 'node --test test/smoke.test.mjs':
+    expected_test = 'node --experimental-strip-types --test test/smoke.test.mjs' if path == 'apps/web/package.json' else 'node --test test/smoke.test.mjs'
+    if pkg.get('scripts',{}).get('test') != expected_test:
         print(f'{path} test script must run smoke.test.mjs', file=sys.stderr); sys.exit(1)
     if not Path(path).parent.joinpath('test/smoke.test.mjs').exists():
         print(f'{path} missing package smoke test', file=sys.stderr); sys.exit(1)

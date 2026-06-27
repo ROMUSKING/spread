@@ -1,27 +1,23 @@
-/**
- * Page — AGENT-060
- *
- * Renders the tiled spreadsheet-native ERP interface. Wires together the TiledWorkspace,
- * dynamic graph explorer panel, workbook graph visualizations, transposed detail views,
- * useCommand hooks for updates, and dynamic SseSubscriber components for active workbook channels.
- *
- * @see docs/ui/tiled-workspace-graph-specification.md
- */
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { TiledWorkspace } from "../components/TiledWorkspace";
+import { AppPreferences } from "../components/AppPreferences";
+import { usePreferences } from "../lib/usePreferences";
 import type { GridRow, GridColumn, CommandState } from "../components/SpreadsheetGrid";
 import type { WorkspaceNode, WorkspaceEdge } from "../components/ExplorerPanel";
 import { useCommand } from "../lib/useCommand";
 import { useSseSubscription } from "../lib/useSseSubscription";
+import { ALLOWED_WORKBOOKS } from "../lib/workbookConstants";
+import { resolveEventWorkbookId, assertAllowedWorkbook } from "../lib/workbookUtils";
+import {
+  isCommandFailure,
+  lifecycleToVisualState,
+  resolveEditVisualState,
+} from "../lib/commandUtils";
 
 const DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001";
-const ALLOWED_WORKBOOKS = [
-  "00000000-0000-0000-0000-000000000002",
-  "00000000-0000-0000-0000-000000000003",
-  "00000000-0000-0000-0000-000000000004",
-];
+const REFRESH_MAX_RETRIES = 3;
 
 const DEFAULT_COLUMNS: GridColumn[] = [
   { columnId: "item_name", label: "Item Name" },
@@ -29,6 +25,17 @@ const DEFAULT_COLUMNS: GridColumn[] = [
   { columnId: "unit_price", label: "Unit Price" },
   { columnId: "total", label: "Total" },
 ];
+
+type ActiveEdit = {
+  workbookId: string;
+  rowId: string;
+  columnId: string;
+  value: string;
+  oldValue: string;
+  commandId: string | null;
+  rowExistedBeforeEdit: boolean;
+  lifecycleState: CommandState["state"];
+};
 
 interface WorkbookResponse {
   rows: Array<{ rowId: unknown; values: unknown }>;
@@ -79,24 +86,33 @@ function parseWorkbookResponse(
   return { rows: normalizedRows, columns: parsedColumns || DEFAULT_COLUMNS };
 }
 
-// Declarative SSE subscriber helper component per workbook ID
 interface SseSubscriberProps {
   tenantId: string;
   workbookId: string;
+  snapshotLoaded: boolean;
   onEvent: (event: any) => void;
   onSyncRequired: (workbookId: string) => void;
-  onConnected?: (workbookId: string) => void;  // for snapshot gating after handshake
+  onConnected: (workbookId: string) => void;
 }
 
-function SseSubscriber({ tenantId, workbookId, onEvent, onSyncRequired, onConnected }: SseSubscriberProps) {
+function SseSubscriber({
+  tenantId,
+  workbookId,
+  snapshotLoaded,
+  onEvent,
+  onSyncRequired,
+  onConnected,
+}: SseSubscriberProps) {
+  const processedLenRef = useRef(0);
+  const handshakeSentRef = useRef(false);
+
   const handleSync = useCallback(() => {
+    handshakeSentRef.current = false;
     onSyncRequired(workbookId);
   }, [workbookId, onSyncRequired]);
 
   const sse = useSseSubscription(tenantId, workbookId, handleSync);
 
-  // Only forward *new* events (incremental) to avoid re-iterating full history on every append
-  const processedLenRef = useRef(0);
   useEffect(() => {
     if (sse.events.length > processedLenRef.current) {
       const fresh = sse.events.slice(processedLenRef.current);
@@ -105,52 +121,72 @@ function SseSubscriber({ tenantId, workbookId, onEvent, onSyncRequired, onConnec
     }
   }, [sse.events, onEvent]);
 
-  // Signal handshake complete separately; snapshotLoaded (fetched) set only on /workbooks success
   useEffect(() => {
-    if (sse.connectionState === 'connected') {
-      onConnected?.(workbookId);
+    if (!snapshotLoaded) {
+      handshakeSentRef.current = false;
     }
-  }, [sse.connectionState, workbookId, onConnected]);
+  }, [snapshotLoaded]);
+
+  useEffect(() => {
+    if (sse.connectionState === "connected" && snapshotLoaded && !handshakeSentRef.current) {
+      handshakeSentRef.current = true;
+      onConnected(workbookId);
+    }
+    if (sse.connectionState !== "connected") {
+      handshakeSentRef.current = false;
+    }
+  }, [sse.connectionState, snapshotLoaded, workbookId, onConnected]);
 
   return null;
 }
 
 export default function Page() {
   const tenantId = DEFAULT_TENANT;
+  const {
+    preferences,
+    loaded: preferencesLoaded,
+    setTheme,
+    setDensity,
+    setColumnWidth,
+    getColumnWidth,
+    resetColumnWidths,
+  } = usePreferences();
 
-  // Graph state
   const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
   const [edges, setEdges] = useState<WorkspaceEdge[]>([]);
-
-  // Workbooks state
   const [workbookRows, setWorkbookRows] = useState<Record<string, GridRow[]>>({});
   const [workbookColumns, setWorkbookColumns] = useState<Record<string, GridColumn[]>>({});
-  // snapshotLoaded: /workbooks fetch complete (authoritative snapshot); ready = this && sseReady
   const [snapshotLoaded, setSnapshotLoaded] = useState<Record<string, boolean>>({});
-  // sseReady: SSE connected handshake (baseWatermark) complete
   const [sseReady, setSseReady] = useState<Record<string, boolean>>({});
-  // eventBuffers: hold deltas/replays while !(snapshotLoaded && sseReady); drained once when both true
   const [eventBuffers, setEventBuffers] = useState<Record<string, any[]>>({});
-
-  // Active in-flight edits map: key is "workbookId:rowId:columnId"
-  const [activeEdits, setActiveEdits] = useState<Map<string, { workbookId: string; rowId: string; columnId: string; value: string; oldValue?: string }>>(new Map());
-
-  // Set of workbook IDs currently visible in tiles
-  const [visibleWorkbookIds, setVisibleWorkbookIds] = useState<string[]>(ALLOWED_WORKBOOKS);
+  const [workbookSyncErrors, setWorkbookSyncErrors] = useState<Record<string, string>>({});
+  const [sseReconnectEpoch, setSseReconnectEpoch] = useState<Record<string, number>>({});
+  const [graphMutationError, setGraphMutationError] = useState<string | null>(null);
+  const [commandNotice, setCommandNotice] = useState<string | null>(null);
+  const [activeEdits, setActiveEdits] = useState<Map<string, ActiveEdit>>(new Map());
+  const activeEditsRef = useRef(activeEdits);
 
   const nextRowIdRefs = useRef<Record<string, number>>({});
+  const lastCellCommandIdRef = useRef<string | null>(null);
+  const lastCellEditRef = useRef<{ workbookId: string; key: string } | null>(null);
+  const lastDeleteCommandIdRef = useRef<string | null>(null);
+  const lastDeleteContextRef = useRef<{ workbookId: string; prevRows: GridRow[] } | null>(null);
+  const ambiguousRecoveryRef = useRef(false);
 
-  const apiBaseUrl = typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:3001`
-    : "http://localhost:3001";
+  useEffect(() => {
+    activeEditsRef.current = activeEdits;
+  }, [activeEdits]);
 
-  // Commands hooks
+  const apiBaseUrl =
+    typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:3001`
+      : "http://localhost:3001";
+
   const cellCmd = useCommand("cell.update", { tenantId, baseUrl: apiBaseUrl });
   const deleteCmd = useCommand("row.delete", { tenantId, baseUrl: apiBaseUrl });
   const nodeAddCmd = useCommand("graph.node.add", { tenantId, baseUrl: apiBaseUrl });
   const edgeAddCmd = useCommand("graph.edge.add", { tenantId, baseUrl: apiBaseUrl });
 
-  // Load Graph nodes/edges
   const refreshGraph = useCallback(async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/workspace/graph`);
@@ -166,9 +202,8 @@ export default function Page() {
     }
   }, [apiBaseUrl]);
 
-  // Load Workbook rows/columns
   const refreshWorkbook = useCallback(
-    async (workbookId: string) => {
+    async (workbookId: string, attempt = 0): Promise<boolean> => {
       try {
         const response = await fetch(
           `${apiBaseUrl}/api/workbooks?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`,
@@ -182,28 +217,38 @@ export default function Page() {
 
         setWorkbookRows((prev) => ({ ...prev, [workbookId]: parsed.rows }));
         setWorkbookColumns((prev) => ({ ...prev, [workbookId]: parsed.columns }));
-        setSnapshotLoaded((prev) => ({ ...prev, [workbookId]: true })); // part of ready (fetched && sse handshake)
-        // Clear lingering actives on successful snapshot refresh (committed state authoritative)
+        setSnapshotLoaded((prev) => ({ ...prev, [workbookId]: true }));
+        setWorkbookSyncErrors((prev) => {
+          const next = { ...prev };
+          delete next[workbookId];
+          return next;
+        });
         setActiveEdits((prev) => {
           const next = new Map(prev);
           for (const k of Array.from(next.keys())) if (k.startsWith(`${workbookId}:`)) next.delete(k);
           return next;
         });
 
-        // Track max row ID for sequential additions
         const maxId = parsed.rows.reduce((max, r) => {
           const n = Number(r.rowId);
           return !isNaN(n) && n > max ? n : max;
         }, 0);
         nextRowIdRefs.current[workbookId] = maxId + 1;
+        return true;
       } catch (e) {
+        if (attempt < REFRESH_MAX_RETRIES - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          return refreshWorkbook(workbookId, attempt + 1);
+        }
+        const message = e instanceof Error ? e.message : "Workbook sync failed";
         console.error(`Failed to refresh workbook ${workbookId}:`, e);
+        setWorkbookSyncErrors((prev) => ({ ...prev, [workbookId]: message }));
+        return false;
       }
     },
     [tenantId, apiBaseUrl]
   );
 
-  // Initial loads
   useEffect(() => {
     void refreshGraph();
     for (const wbId of ALLOWED_WORKBOOKS) {
@@ -211,9 +256,32 @@ export default function Page() {
     }
   }, [refreshGraph, refreshWorkbook]);
 
-  // Apply data events (cell/delete) only when called post-ready. Graph handled separately.
+  const rollbackCellEdit = useCallback(
+    (
+      workbookId: string,
+      rowId: string,
+      columnId: string,
+      oldVal: string,
+      rowExistedBeforeEdit: boolean
+    ) => {
+      setWorkbookRows((prev) => {
+        const rws = prev[workbookId] || [];
+        if (!rowExistedBeforeEdit) {
+          return { ...prev, [workbookId]: rws.filter((r) => r.rowId !== rowId) };
+        }
+        const reverted = rws.map((r) =>
+          r.rowId === rowId ? { ...r, values: { ...r.values, [columnId]: oldVal } } : r
+        );
+        return { ...prev, [workbookId]: reverted };
+      });
+    },
+    []
+  );
+
   const applySseDataEvent = useCallback((event: any) => {
-    const eventWorkbookId = event.workbookId || ALLOWED_WORKBOOKS[0];
+    const eventWorkbookId = resolveEventWorkbookId(event);
+    if (!eventWorkbookId) return;
+
     if (event.eventType === "cell.update.committed") {
       const payload = event.payload;
       if (!payload || typeof payload !== "object") return;
@@ -269,19 +337,18 @@ export default function Page() {
     }
   }, []);
 
-  // Handle SSE Events: buffer when not (fetched snapshot AND handshake); drain on ready. Graph bypass.
   const handleSseEvent = useCallback(
     (event: any) => {
-      const eventWorkbookId = event.workbookId || ALLOWED_WORKBOOKS[0];
-
       if (event.eventType === "graph.node.committed" || event.eventType === "graph.edge.committed") {
         void refreshGraph();
-        return; // graph always (may omit wb or cross)
+        return;
       }
+
+      const eventWorkbookId = resolveEventWorkbookId(event);
+      if (!eventWorkbookId) return;
 
       const ready = !!snapshotLoaded[eventWorkbookId] && !!sseReady[eventWorkbookId];
       if (!ready) {
-        // buffer instead of drop; will drain exactly once when ready
         setEventBuffers((prev) => {
           const cur = prev[eventWorkbookId] || [];
           if (event.eventId && cur.some((e) => e.eventId === event.eventId)) return prev;
@@ -294,7 +361,6 @@ export default function Page() {
     [refreshGraph, snapshotLoaded, sseReady, applySseDataEvent]
   );
 
-  // Drain buffers exactly once when both fetched AND connected for a wb
   useEffect(() => {
     setEventBuffers((prevBuf) => {
       const nextBuf = { ...prevBuf };
@@ -314,49 +380,160 @@ export default function Page() {
   }, [snapshotLoaded, sseReady, applySseDataEvent]);
 
   const handleSyncRequired = useCallback(
-    (wbId: string) => {
+    async (wbId: string) => {
       console.warn(`SYNC_REQUIRED received for ${wbId}`);
       setSnapshotLoaded((prev) => ({ ...prev, [wbId]: false }));
       setSseReady((prev) => ({ ...prev, [wbId]: false }));
-      setEventBuffers((prev) => { const n = {...prev}; delete n[wbId]; return n; });
-      void refreshWorkbook(wbId);
+      setEventBuffers((prev) => {
+        if (!prev[wbId]) return prev;
+        const next = { ...prev };
+        delete next[wbId];
+        return next;
+      });
+      const ok = await refreshWorkbook(wbId);
+      if (!ok) {
+        setSseReconnectEpoch((prev) => ({ ...prev, [wbId]: (prev[wbId] || 0) + 1 }));
+      }
     },
     [refreshWorkbook]
   );
 
-  // Recovery on terminal states (ambiguous requires refresh per doc; actual reconcile uses SSE for committed + refresh for recovery)
+  const handleRetrySync = useCallback(
+    async (wbId: string) => {
+      setSnapshotLoaded((prev) => ({ ...prev, [wbId]: false }));
+      setSseReady((prev) => ({ ...prev, [wbId]: false }));
+      setEventBuffers((prev) => {
+        if (!prev[wbId]) return prev;
+        const next = { ...prev };
+        delete next[wbId];
+        return next;
+      });
+      setSseReconnectEpoch((prev) => ({ ...prev, [wbId]: (prev[wbId] || 0) + 1 }));
+      const ok = await refreshWorkbook(wbId);
+      if (!ok) {
+        setSseReconnectEpoch((prev) => ({ ...prev, [wbId]: (prev[wbId] || 0) + 1 }));
+      }
+    },
+    [refreshWorkbook]
+  );
+
+  const handleSseConnected = useCallback((wbId: string) => {
+    setSseReady((prev) => ({ ...prev, [wbId]: true }));
+  }, []);
 
   useEffect(() => {
-    if (cellCmd.state === "ambiguous_requires_refresh") {
-      // Clear lingering activeEdits + revert via refresh (specific clear + server state to drop optimistic value)
-      setActiveEdits(new Map());
-      ALLOWED_WORKBOOKS.forEach((wb) => void refreshWorkbook(wb));
-      cellCmd.refresh();
-    }
-    if (cellCmd.state === "rejected" || cellCmd.state === "failed") {
-      // Revert to server state; SSE won't deliver for non-committed.
-      setActiveEdits(new Map());
-      ALLOWED_WORKBOOKS.forEach((wb) => void refreshWorkbook(wb));
-      // leave hook state (user sees error via cmd if needed); next submit will work or user can ignore
-    }
-  }, [cellCmd.state, refreshWorkbook]);
+    const cmdId = cellCmd.commandId;
+    if (!cmdId) return;
+    const mapped = lifecycleToVisualState(cellCmd.state);
+    if (!mapped || mapped === "pending") return;
 
-  // ─── Workspace Callbacks ──────────────────────────────────
+    setActiveEdits((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [key, edit] of next) {
+        if (edit.commandId === cmdId && edit.lifecycleState !== mapped) {
+          next.set(key, { ...edit, lifecycleState: mapped });
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [cellCmd.state, cellCmd.commandId]);
+
+  useEffect(() => {
+    const failedId = cellCmd.commandId;
+    if (cellCmd.state !== "ambiguous_requires_refresh") return;
+    if (!failedId || failedId !== lastCellCommandIdRef.current) return;
+    if (ambiguousRecoveryRef.current) return;
+
+    const ctx = lastCellEditRef.current;
+    if (!ctx) return;
+
+    ambiguousRecoveryRef.current = true;
+    void (async () => {
+      const ok = await refreshWorkbook(ctx.workbookId);
+      if (ok) {
+        setActiveEdits((prev) => {
+          const next = new Map(prev);
+          for (const [k, edit] of next) {
+            if (edit.commandId === failedId) next.delete(k);
+          }
+          return next;
+        });
+        cellCmd.refresh();
+      } else {
+        const edit = activeEditsRef.current.get(ctx.key);
+        if (edit && edit.commandId === failedId) {
+          rollbackCellEdit(
+            edit.workbookId,
+            edit.rowId,
+            edit.columnId,
+            edit.oldValue,
+            edit.rowExistedBeforeEdit
+          );
+          setActiveEdits((prev) => {
+            const next = new Map(prev);
+            const current = next.get(ctx.key);
+            if (!current || current.commandId !== failedId) return prev;
+            next.set(ctx.key, {
+              ...current,
+              value: current.oldValue,
+              lifecycleState: "ambiguous_requires_refresh",
+            });
+            return next;
+          });
+        }
+        cellCmd.refresh();
+        setCommandNotice("Refresh failed. Edit rolled back; retry after sync recovers.");
+      }
+      ambiguousRecoveryRef.current = false;
+    })();
+  }, [cellCmd.state, cellCmd.commandId, refreshWorkbook, cellCmd, rollbackCellEdit]);
+
+  useEffect(() => {
+    const failedId = deleteCmd.commandId;
+    if (!failedId || failedId !== lastDeleteCommandIdRef.current) return;
+
+    if (isCommandFailure(deleteCmd.state) || deleteCmd.state === "ambiguous_requires_refresh") {
+      const ctx = lastDeleteContextRef.current;
+      if (ctx) {
+        setWorkbookRows((prev) => ({ ...prev, [ctx.workbookId]: ctx.prevRows }));
+        void refreshWorkbook(ctx.workbookId);
+      }
+      if (deleteCmd.state === "ambiguous_requires_refresh") deleteCmd.refresh();
+    }
+  }, [deleteCmd.state, deleteCmd.commandId, refreshWorkbook, deleteCmd]);
+
   const handleCellEdit = useCallback(
     async (workbookId: string, rowId: string, columnId: string, value: string) => {
+      if (!assertAllowedWorkbook(workbookId)) {
+        setCommandNotice(`Workbook ${workbookId.slice(-4)} is not available in this workspace.`);
+        return;
+      }
+
       const rows = workbookRows[workbookId] || [];
       const row = rows.find((r) => r.rowId === rowId);
       const oldVal = row ? row.values[columnId] || "" : "";
+      const rowExistedBeforeEdit = !!row;
       if (oldVal === value) return;
 
       const key = `${workbookId}:${rowId}:${columnId}`;
+      setCommandNotice(null);
       setActiveEdits((prev) => {
         const next = new Map(prev);
-        next.set(key, { workbookId, rowId, columnId, value, oldValue: oldVal });
+        next.set(key, {
+          workbookId,
+          rowId,
+          columnId,
+          value,
+          oldValue: oldVal,
+          commandId: null,
+          rowExistedBeforeEdit,
+          lifecycleState: "pending",
+        });
         return next;
       });
 
-      // Optimistic layout update (upsert for new rows allocated at commit)
       setWorkbookRows((prev) => {
         const rws = prev[workbookId] || [];
         let nextRows = rws.map((r) => {
@@ -375,7 +552,9 @@ export default function Page() {
         if (!found) {
           const cols = workbookColumns[workbookId] || DEFAULT_COLUMNS;
           const vals: Record<string, string> = {};
-          cols.forEach((c) => { vals[c.columnId] = ""; });
+          cols.forEach((c) => {
+            vals[c.columnId] = "";
+          });
           vals[columnId] = value;
           if (columnId === "quantity" || columnId === "unit_price") {
             const qty = Number(vals.quantity);
@@ -389,16 +568,37 @@ export default function Page() {
         return { ...prev, [workbookId]: nextRows };
       });
 
-      const success = await cellCmd.submit({ rowId, columnId, value }, { workbookId });
-      if (!success) {
-        // Rollback optimistic using pre-captured old (covers ambiguous/rejected too since submit may return true but state terminal)
-        if (oldVal !== value) {
-          setWorkbookRows((prev) => {
-            const rws = prev[workbookId] || [];
-            const reverted = rws.map((r) => r.rowId === rowId ? { ...r, values: { ...r.values, [columnId]: oldVal } } : r );
-            return { ...prev, [workbookId]: reverted };
-          });
+      const result = await cellCmd.submit({ rowId, columnId, value }, { workbookId });
+      lastCellCommandIdRef.current = result.commandId;
+      lastCellEditRef.current = { workbookId, key };
+
+      const resolvedLifecycle =
+        result.initiated && lifecycleToVisualState(result.state)
+          ? lifecycleToVisualState(result.state)!
+          : "pending";
+
+      setActiveEdits((prev) => {
+        const next = new Map(prev);
+        const edit = next.get(key);
+        if (edit) {
+          next.set(key, { ...edit, commandId: result.commandId, lifecycleState: resolvedLifecycle });
         }
+        return next;
+      });
+
+      if (!result.initiated) {
+        setCommandNotice("Another edit is still in progress. Wait for it to finish.");
+        rollbackCellEdit(workbookId, rowId, columnId, oldVal, rowExistedBeforeEdit);
+        setActiveEdits((prev) => {
+          const next = new Map(prev);
+          next.delete(key);
+          return next;
+        });
+        return;
+      }
+
+      if (isCommandFailure(result.state)) {
+        rollbackCellEdit(workbookId, rowId, columnId, oldVal, rowExistedBeforeEdit);
         setActiveEdits((prev) => {
           const next = new Map(prev);
           next.delete(key);
@@ -407,56 +607,84 @@ export default function Page() {
         void refreshWorkbook(workbookId);
       }
     },
-    [workbookRows, cellCmd, refreshWorkbook]
+    [workbookRows, workbookColumns, cellCmd, refreshWorkbook, rollbackCellEdit]
   );
 
-  const handleCreateRow = useCallback(
-    (workbookId: string): string => {
-      // Allocate row id only (no state mutation here). The row materializes
-      // on first cell.update commit (via optimistic + SSE) to follow empty-row-via-command.
-      const currentNextId = nextRowIdRefs.current[workbookId] || 1;
-      const newRowId = String(currentNextId);
-      nextRowIdRefs.current[workbookId] = currentNextId + 1;
-      return newRowId;
-    },
-    []
-  );
+  const handleCreateRow = useCallback((workbookId: string): string => {
+    const currentNextId = nextRowIdRefs.current[workbookId] || 1;
+    const newRowId = String(currentNextId);
+    nextRowIdRefs.current[workbookId] = currentNextId + 1;
+    return newRowId;
+  }, []);
 
   const handleDeleteRow = useCallback(
     async (workbookId: string, rowId: string) => {
+      if (!assertAllowedWorkbook(workbookId)) {
+        setCommandNotice(`Workbook ${workbookId.slice(-4)} is not available in this workspace.`);
+        return;
+      }
+
       const prevRows = workbookRows[workbookId] || [];
+      lastDeleteContextRef.current = { workbookId, prevRows };
+      setCommandNotice(null);
       setWorkbookRows((prev) => {
         const rws = prev[workbookId] || [];
         return { ...prev, [workbookId]: rws.filter((r) => r.rowId !== rowId) };
       });
-      const success = await deleteCmd.submit({ rowId }, { workbookId });
-      if (!success) {
-        // restore on fail (no partial)
+
+      const result = await deleteCmd.submit({ rowId }, { workbookId });
+      lastDeleteCommandIdRef.current = result.commandId;
+
+      if (!result.initiated) {
+        setCommandNotice("Another command is still in progress. Wait for it to finish.");
         setWorkbookRows((prev) => ({ ...prev, [workbookId]: prevRows }));
+        return;
+      }
+
+      if (isCommandFailure(result.state)) {
+        setWorkbookRows((prev) => ({ ...prev, [workbookId]: prevRows }));
+        void refreshWorkbook(workbookId);
       }
     },
-    [deleteCmd, workbookRows]
+    [deleteCmd, workbookRows, refreshWorkbook]
   );
 
-  const handleAddColumn = useCallback(
-    (workbookId: string, columnId: string, label: string) => {
-      setWorkbookColumns((prev) => {
-        const cols = prev[workbookId] || [];
-        if (cols.some((c) => c.columnId === columnId)) return prev;
-        return { ...prev, [workbookId]: [...cols, { columnId, label }] };
-      });
-    },
-    []
-  );
+  // Phase 0 UI-only stub: column add is local state until a column command exists.
+  const handleAddColumn = useCallback((workbookId: string, columnId: string, label: string) => {
+    setWorkbookColumns((prev) => {
+      const cols = prev[workbookId] || [];
+      if (cols.some((c) => c.columnId === columnId)) return prev;
+      return { ...prev, [workbookId]: [...cols, { columnId, label }] };
+    });
+  }, []);
 
   const handleAddWorkbook = useCallback(
     async (label: string, categoryId: string) => {
+      setGraphMutationError(null);
       const id = "wb-" + Math.random().toString(36).substr(2, 9);
-      // Submit new workbook node
-      await nodeAddCmd.submit({ id, label, kind: "workbook", tags: [label.toLowerCase()] });
-      // Submit structural contain edge
+      const nodeResult = await nodeAddCmd.submit({
+        id,
+        label,
+        kind: "workbook",
+        tags: [label.toLowerCase()],
+      });
+      if (!nodeResult.initiated || isCommandFailure(nodeResult.state)) {
+        setGraphMutationError(nodeAddCmd.error?.message || "Failed to add workbook");
+        return;
+      }
+      void refreshGraph();
       const edgeId = `${categoryId}:${id}`;
-      await edgeAddCmd.submit({ id: edgeId, source: categoryId, target: id, label: "contains" });
+      const edgeResult = await edgeAddCmd.submit({
+        id: edgeId,
+        source: categoryId,
+        target: id,
+        label: "contains",
+      });
+      if (!edgeResult.initiated || isCommandFailure(edgeResult.state)) {
+        setGraphMutationError(edgeAddCmd.error?.message || "Failed to link workbook to category");
+        void refreshGraph();
+        return;
+      }
       void refreshGraph();
     },
     [nodeAddCmd, edgeAddCmd, refreshGraph]
@@ -464,8 +692,13 @@ export default function Page() {
 
   const handleAddCategory = useCallback(
     async (label: string) => {
+      setGraphMutationError(null);
       const id = "cat-" + Math.random().toString(36).substr(2, 9);
-      await nodeAddCmd.submit({ id, label, kind: "category", tags: [] });
+      const result = await nodeAddCmd.submit({ id, label, kind: "category", tags: [] });
+      if (!result.initiated || isCommandFailure(result.state)) {
+        setGraphMutationError(nodeAddCmd.error?.message || "Failed to add category");
+        return;
+      }
       void refreshGraph();
     },
     [nodeAddCmd, refreshGraph]
@@ -473,90 +706,104 @@ export default function Page() {
 
   const handleAddEdge = useCallback(
     async (source: string, target: string, label: string) => {
+      setGraphMutationError(null);
       const id = `${source}:${target}`;
-      await edgeAddCmd.submit({ id, source, target, label });
+      const result = await edgeAddCmd.submit({ id, source, target, label });
+      if (!result.initiated || isCommandFailure(result.state)) {
+        setGraphMutationError(edgeAddCmd.error?.message || "Failed to add relation");
+        return;
+      }
       void refreshGraph();
     },
     [edgeAddCmd, refreshGraph]
   );
 
-  // Derive active commandStates map (scoped with workbookId). Status from hook for pending/rejected/ambiguous; committed mainly via SSE.
-
   const commandStates = new Map<string, CommandState>();
   for (const [key, edit] of activeEdits) {
-    let visualState: CommandState["state"] = "pending";
-    if (cellCmd.state === "committed") visualState = "committed";
-    else if (cellCmd.state === "rejected" || cellCmd.state === "failed") visualState = "rejected";
-    else if (cellCmd.state === "ambiguous_requires_refresh") visualState = "ambiguous_requires_refresh";
+    const visualState = resolveEditVisualState(
+      edit.lifecycleState,
+      edit.commandId,
+      cellCmd.commandId,
+      cellCmd.commandId && edit.commandId === cellCmd.commandId ? cellCmd.state : null
+    );
 
-    // Keep full key including workbook for scoping in consumers
     commandStates.set(key, {
       state: visualState,
       value: edit.value,
-      error: cellCmd.error?.message,
+      error: edit.commandId === cellCmd.commandId ? cellCmd.error?.message : undefined,
     });
   }
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "radial-gradient(circle at top left, #1e1e2f, #0d0d15)",
-        color: "#f8fafc",
-        padding: "24px",
-        fontFamily: "'Outfit', 'Inter', sans-serif",
-      }}
-    >
-      {/* Declarative SSE connections for all workbooks (events delivered incrementally; buffered until snapshot + handshake) */}
-      {visibleWorkbookIds.map((wbId) => (
+    <main className="app-shell">
+      {ALLOWED_WORKBOOKS.map((wbId) => (
         <SseSubscriber
-          key={wbId}
+          key={`${wbId}-${sseReconnectEpoch[wbId] || 0}`}
           tenantId={tenantId}
           workbookId={wbId}
+          snapshotLoaded={!!snapshotLoaded[wbId]}
           onEvent={handleSseEvent}
           onSyncRequired={handleSyncRequired}
-          onConnected={(wb) => setSseReady((p) => ({ ...p, [wb]: true }))}
+          onConnected={handleSseConnected}
         />
       ))}
 
-      <div style={{ maxWidth: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
-        {/* Top Header info */}
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h1
-              style={{
-                fontSize: "20px",
-                fontWeight: 700,
-                margin: 0,
-                background: "linear-gradient(135deg, #60a5fa, #3b82f6)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              Spreadsheet-Native ERP: Tiled Graph Workspace
-            </h1>
-            <p style={{ margin: "2px 0 0 0", color: "#475569", fontSize: "12px" }}>
-              Dynamic Multi-Workbook Splits & Category Graph Relations
+      <header className="app-header">
+        <div>
+          <h1 className="app-title">Spread ERP</h1>
+          <p className="app-subtitle">Multi-workbook workspace with live command status</p>
+          {commandNotice && (
+            <p className="status-badge status-badge--danger" style={{ marginTop: "var(--space-sm)" }}>
+              {commandNotice}
             </p>
-          </div>
-        </header>
+          )}
+          {graphMutationError && (
+            <p className="status-badge status-badge--danger" style={{ marginTop: "var(--space-sm)" }}>
+              {graphMutationError}
+            </p>
+          )}
+          {Object.entries(workbookSyncErrors).map(([wbId, msg]) => (
+            <div
+              key={wbId}
+              style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginTop: "var(--space-xs)" }}
+            >
+              <span className="status-badge status-badge--danger">
+                Sync failed for {wbId.slice(-4)}: {msg}
+              </span>
+              <button type="button" className="btn btn--ghost" onClick={() => handleRetrySync(wbId)}>
+                Retry sync
+              </button>
+            </div>
+          ))}
+        </div>
+        {preferencesLoaded && (
+          <AppPreferences
+            theme={preferences.theme}
+            density={preferences.density}
+            onThemeChange={setTheme}
+            onDensityChange={setDensity}
+            onResetColumnWidths={resetColumnWidths}
+          />
+        )}
+      </header>
 
-        {/* Tiled Workspace */}
-        <TiledWorkspace
-          nodes={nodes}
-          edges={edges}
-          workbookRows={workbookRows}
-          workbookColumns={workbookColumns}
-          commandStates={commandStates}
-          onCellEdit={handleCellEdit}
-          onCreateRow={handleCreateRow}
-          onDeleteRow={handleDeleteRow}
-          onAddColumn={handleAddColumn}
-          onAddWorkbook={handleAddWorkbook}
-          onAddCategory={handleAddCategory}
-          onAddEdge={handleAddEdge}
-        />
-      </div>
+      <TiledWorkspace
+        nodes={nodes}
+        edges={edges}
+        allowedWorkbookIds={[...ALLOWED_WORKBOOKS]}
+        workbookRows={workbookRows}
+        workbookColumns={workbookColumns}
+        commandStates={commandStates}
+        onCellEdit={handleCellEdit}
+        onCreateRow={handleCreateRow}
+        onDeleteRow={handleDeleteRow}
+        onAddColumn={handleAddColumn}
+        onAddWorkbook={handleAddWorkbook}
+        onAddCategory={handleAddCategory}
+        onAddEdge={handleAddEdge}
+        getColumnWidth={getColumnWidth}
+        onColumnWidthChange={setColumnWidth}
+      />
     </main>
   );
 }

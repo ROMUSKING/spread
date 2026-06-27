@@ -50,12 +50,18 @@ export type CommandError = {
   message: string;
 };
 
+export type CommandSubmitResult = {
+  initiated: boolean;
+  state: CommandLifecycleState;
+  commandId: string | null;
+};
+
 /** Shape returned by the useCommand hook. */
 export type UseCommandResult<TPayload = unknown> = {
   /** Current lifecycle state. */
   state: CommandLifecycleState;
-  /** Submit a command with the given payload. Returns false if blocked. */
-  submit: (payload: TPayload, submitOptions?: CommandClientOptions) => Promise<boolean>;
+  /** Submit a command. Returns lifecycle outcome so callers can roll back on rejection. */
+  submit: (payload: TPayload, submitOptions?: CommandClientOptions) => Promise<CommandSubmitResult>;
   /** Refresh after ambiguity — resets state so a new command can be issued. */
   refresh: () => void;
   /** Current or most recent command ID (null before first submit). */
@@ -206,21 +212,21 @@ export function useCommand<TPayload = unknown>(
   }, []);
 
   /**
-   * Submit a command. Returns `true` if the submission was initiated,
-   * `false` if blocked (e.g. ambiguity not yet resolved).
+   * Submit a command. Returns `CommandSubmitResult` with `initiated`, terminal
+   * `state`, and `commandId` so callers can roll back or show status per edit.
    *
    * Per AGENT-013: does NOT auto-retry with a new command ID after ambiguity.
    */
   const submit = useCallback(
-    async (payload: TPayload, submitOptions: CommandClientOptions = {}): Promise<boolean> => {
+    async (payload: TPayload, submitOptions: CommandClientOptions = {}): Promise<CommandSubmitResult> => {
       // Block submission if the previous command is ambiguous (must refresh first)
       if (state === "ambiguous_requires_refresh") {
-        return false;
+        return { initiated: false, state, commandId };
       }
 
       // Block if already pending
       if (state === "locally_pending" || state === "command_pending") {
-        return false;
+        return { initiated: false, state, commandId };
       }
 
       const id = generateUUID();
@@ -232,7 +238,7 @@ export function useCommand<TPayload = unknown>(
       try {
         const requestHash = await computeRequestHash(payload);
 
-        if (!mountedRef.current) return false;
+        if (!mountedRef.current) return { initiated: false, state: "locally_pending", commandId: id };
         setState("command_pending");
 
         const response = await submitCommand(
@@ -245,7 +251,9 @@ export function useCommand<TPayload = unknown>(
           { ...clientOptions, ...submitOptions, correlationId: submitOptions.correlationId || clientOptions.correlationId || id },
         );
 
-        if (!mountedRef.current) return true;
+        if (!mountedRef.current) {
+          return { initiated: true, state: "command_pending", commandId: id };
+        }
 
         const newState = serverStatusToLifecycle(response.status);
         setState(newState);
@@ -255,13 +263,14 @@ export function useCommand<TPayload = unknown>(
           setError({ code: response.problem.code, message: response.problem.message });
         }
 
-        return true;
+        return { initiated: true, state: newState, commandId: id };
       } catch (err: unknown) {
-        if (!mountedRef.current) return false;
+        if (!mountedRef.current) {
+          return { initiated: false, state: "idle", commandId: id };
+        }
         stopElapsedTimer();
 
         if (err instanceof CommandTimeoutError) {
-          // Timeout with exhausted polling — treat as ambiguous per spec
           setState("ambiguous_requires_refresh");
           setError({
             code: "COMMAND_TIMEOUT",
@@ -269,7 +278,7 @@ export function useCommand<TPayload = unknown>(
               "This edit may have been saved, but the connection ended before confirmation. " +
               "Refresh this row before retrying.",
           });
-          return true;
+          return { initiated: true, state: "ambiguous_requires_refresh", commandId: id };
         }
 
         if (err instanceof CommandHttpError) {
@@ -278,19 +287,18 @@ export function useCommand<TPayload = unknown>(
             code: `HTTP_${err.statusCode}`,
             message: err.message,
           });
-          return true;
+          return { initiated: true, state: "failed", commandId: id };
         }
 
-        // Unknown error
         setState("failed");
         setError({
           code: "UNKNOWN_ERROR",
           message: err instanceof Error ? err.message : "Unknown error",
         });
-        return true;
+        return { initiated: true, state: "failed", commandId: id };
       }
     },
-    [state, commandType, clientOptions, startElapsedTimer, stopElapsedTimer],
+    [state, commandId, commandType, clientOptions, startElapsedTimer, stopElapsedTimer],
   );
 
   /**

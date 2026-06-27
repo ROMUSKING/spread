@@ -11,15 +11,20 @@ export interface TileState {
   selectedRowId?: string | null;
 }
 
+const TILE_VIEW_LABELS: Record<TileState["type"], string> = {
+  explorer: "Navigator",
+  grid: "Grid",
+  graph: "Relations",
+  detail: "Detail",
+};
+
 interface TiledWorkspaceProps {
-  // Global states & data
   nodes: WorkspaceNode[];
   edges: WorkspaceEdge[];
+  allowedWorkbookIds: string[];
   workbookRows: Record<string, GridRow[]>;
   workbookColumns: Record<string, GridColumn[]>;
   commandStates: Map<string, CommandState>;
-
-  // Callbacks
   onCellEdit: (workbookId: string, rowId: string, columnId: string, value: string) => void;
   onCreateRow: (workbookId: string) => string;
   onDeleteRow: (workbookId: string, rowId: string) => void;
@@ -27,11 +32,14 @@ interface TiledWorkspaceProps {
   onAddWorkbook: (label: string, categoryId: string) => void;
   onAddCategory: (label: string) => void;
   onAddEdge: (source: string, target: string, label: string) => void;
+  getColumnWidth?: (workbookId: string, columnId: string) => number | undefined;
+  onColumnWidthChange?: (workbookId: string, columnId: string, width: number) => void;
 }
 
 export function TiledWorkspace({
   nodes,
   edges,
+  allowedWorkbookIds,
   workbookRows,
   workbookColumns,
   commandStates,
@@ -42,6 +50,8 @@ export function TiledWorkspace({
   onAddWorkbook,
   onAddCategory,
   onAddEdge,
+  getColumnWidth,
+  onColumnWidthChange,
 }: TiledWorkspaceProps) {
   const [tiles, setTiles] = useState<TileState[]>([
     { id: "tile-1", type: "explorer", workbookId: "00000000-0000-0000-0000-000000000002" },
@@ -66,24 +76,16 @@ export function TiledWorkspace({
   };
 
   const closeTile = (id: string) => {
-    if (tiles.length <= 1) return; // Must keep at least one tile
+    if (tiles.length <= 1) return;
     setTiles(tiles.filter((t) => t.id !== id));
   };
 
   const updateTile = (id: string, updates: Partial<TileState>) => {
-    setTiles(
-      tiles.map((t) => {
-        if (t.id === id) {
-          return { ...t, ...updates };
-        }
-        return t;
-      })
-    );
+    setTiles(tiles.map((t) => (t.id === id ? { ...t, ...updates } : t)));
   };
 
   const handleSelectWorkbookGlobal = (targetWbId: string) => {
-    // Switch all spreadsheet grid tiles to the selected workbook ID
-    // and reset selected row
+    if (!allowedWorkbookIds.includes(targetWbId)) return;
     setTiles((prev) =>
       prev.map((t) => {
         if (t.type === "grid" || t.type === "detail") {
@@ -95,141 +97,63 @@ export function TiledWorkspace({
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "calc(100vh - 120px)",
-        gap: "12px",
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      {/* Workspace Controls Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          background: "rgba(30,30,45,0.4)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: "8px",
-          padding: "8px 16px",
-        }}
-      >
-        <span style={{ fontSize: "13px", fontWeight: 600, color: "#94a3b8" }}>
-          Workspace Tiles: {tiles.length} active
+    <div className="workspace">
+      <div className="workspace-toolbar">
+        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+          {tiles.length} tile{tiles.length === 1 ? "" : "s"}
         </span>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "var(--space-sm)" }}>
           <button
+            type="button"
+            className={`btn ${layoutDirection === "row" ? "btn--active" : ""}`}
             onClick={() => setLayoutDirection("row")}
-            style={{
-              background: layoutDirection === "row" ? "#3b82f6" : "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "4px",
-              padding: "4px 10px",
-              color: "#fff",
-              fontSize: "11px",
-              cursor: "pointer",
-            }}
           >
-            Row Layout
+            Horizontal
           </button>
           <button
+            type="button"
+            className={`btn ${layoutDirection === "column" ? "btn--active" : ""}`}
             onClick={() => setLayoutDirection("column")}
-            style={{
-              background: layoutDirection === "column" ? "#3b82f6" : "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "4px",
-              padding: "4px 10px",
-              color: "#fff",
-              fontSize: "11px",
-              cursor: "pointer",
-            }}
           >
-            Column Layout
+            Vertical
           </button>
         </div>
       </div>
 
-      {/* Tiles Container */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: layoutDirection,
-          gap: "12px",
-          overflow: "hidden",
-        }}
-      >
+      <div className={`workspace-tiles workspace-tiles--${layoutDirection}`}>
         {tiles.map((tile, idx) => {
           const rows = workbookRows[tile.workbookId] || [];
           const columns = workbookColumns[tile.workbookId] || [];
           const selectedRow = rows.find((r) => r.rowId === tile.selectedRowId) || null;
 
           return (
-            <div
-              key={tile.id}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                background: "rgba(30, 30, 40, 0.4)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "10px",
-                overflow: "hidden",
-                minWidth: layoutDirection === "row" ? "300px" : "auto",
-                minHeight: layoutDirection === "column" ? "200px" : "auto",
-              }}
-            >
-              {/* Tile Header controls */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  background: "rgba(15, 15, 25, 0.8)",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
-                  padding: "6px 12px",
-                }}
-              >
-                {/* View Dropdown Selector */}
-                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <div key={tile.id} className="tile">
+              <div className="tile-toolbar">
+                <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
                   <select
+                    className="select"
                     value={tile.type}
-                    onChange={(e) => updateTile(tile.id, { type: e.target.value as any })}
-                    style={{
-                      background: "rgba(0,0,0,0.5)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "4px",
-                      color: "#e2e8f0",
-                      fontSize: "11px",
-                      padding: "2px 4px",
-                      outline: "none",
-                    }}
+                    onChange={(e) => updateTile(tile.id, { type: e.target.value as TileState["type"] })}
+                    aria-label="Tile view"
                   >
-                    <option value="explorer">🗂️ Module Navigator</option>
-                    <option value="grid">📊 Spreadsheet Grid</option>
-                    <option value="graph">🔗 Relation Graph</option>
-                    <option value="detail">📝 Detail Card</option>
+                    {(Object.keys(TILE_VIEW_LABELS) as TileState["type"][]).map((type) => (
+                      <option key={type} value={type}>
+                        {TILE_VIEW_LABELS[type]}
+                      </option>
+                    ))}
                   </select>
 
-                  {/* Workbook Selector for Spreadsheet/Detail views */}
                   {(tile.type === "grid" || tile.type === "detail") && (
                     <select
+                      className="select"
                       value={tile.workbookId}
-                      onChange={(e) => updateTile(tile.id, { workbookId: e.target.value, selectedRowId: null })}
-                      style={{
-                        background: "rgba(0,0,0,0.5)",
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "4px",
-                        color: "#60a5fa",
-                        fontSize: "11px",
-                        padding: "2px 4px",
-                        outline: "none",
-                      }}
+                      onChange={(e) =>
+                        updateTile(tile.id, { workbookId: e.target.value, selectedRowId: null })
+                      }
+                      aria-label="Workbook"
                     >
                       {nodes
-                        .filter((n) => n.kind === "workbook")
+                        .filter((n) => n.kind === "workbook" && allowedWorkbookIds.includes(n.id))
                         .map((wb) => (
                           <option key={wb.id} value={wb.id}>
                             {wb.label}
@@ -239,47 +163,35 @@ export function TiledWorkspace({
                   )}
                 </div>
 
-                {/* Tile Split & Close Actions */}
-                <div style={{ display: "flex", gap: "6px" }}>
+                <div style={{ display: "flex", gap: "var(--space-xs)" }}>
                   <button
+                    type="button"
+                    className="btn btn--ghost"
                     onClick={() => splitTile(idx)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "#94a3b8",
-                      fontSize: "11px",
-                      cursor: "pointer",
-                      padding: "2px 4px",
-                    }}
                     title="Split pane"
                   >
-                    🥞 Split
+                    Split
                   </button>
                   {tiles.length > 1 && (
                     <button
+                      type="button"
+                      className="btn btn--ghost"
                       onClick={() => closeTile(tile.id)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "#ef4444",
-                        fontSize: "11px",
-                        cursor: "pointer",
-                        padding: "2px 4px",
-                      }}
                       title="Close pane"
+                      style={{ color: "var(--color-danger)" }}
                     >
-                      ❌ Close
+                      Close
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Tile Content Rendering */}
-              <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+              <div className="tile-content">
                 {tile.type === "explorer" && (
                   <ExplorerPanel
                     nodes={nodes}
                     edges={edges}
+                    allowedWorkbookIds={allowedWorkbookIds}
                     activeWorkbookId={tile.workbookId}
                     onSelectWorkbook={handleSelectWorkbookGlobal}
                     onAddWorkbook={(label, catId) => onAddWorkbook(label, catId)}
@@ -288,7 +200,7 @@ export function TiledWorkspace({
                 )}
 
                 {tile.type === "grid" && (
-                  <div style={{ padding: "12px", height: "100%", overflowY: "auto" }}>
+                  <div className="tile-grid-wrap">
                     <SpreadsheetGrid
                       rows={rows}
                       columns={columns}
@@ -298,11 +210,11 @@ export function TiledWorkspace({
                       onDeleteRow={(rowId) => onDeleteRow(tile.workbookId, rowId)}
                       onAddColumn={(colId, label) => onAddColumn(tile.workbookId, colId, label)}
                       commandStates={commandStates}
-                      // Capture row selection for detail cards in the workspace
+                      {...(getColumnWidth ? { getColumnWidth } : {})}
+                      {...(onColumnWidthChange ? { onColumnWidthChange } : {})}
                       onGutterClick={(rIdx) => {
                         const targetRow = rows[rIdx];
                         if (targetRow) {
-                          // Find detail cards in workspace and update their selected row ID
                           setTiles((prev) =>
                             prev.map((t) => {
                               if (t.type === "detail" && t.workbookId === tile.workbookId) {
@@ -321,6 +233,7 @@ export function TiledWorkspace({
                   <WorkbookGraph
                     nodes={nodes}
                     edges={edges}
+                    allowedWorkbookIds={allowedWorkbookIds}
                     activeWorkbookId={tile.workbookId}
                     onSelectWorkbook={handleSelectWorkbookGlobal}
                     onAddEdge={onAddEdge}

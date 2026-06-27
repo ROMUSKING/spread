@@ -74,17 +74,14 @@ export function useSseSubscription(
     setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
 
     const scheduleReconnect = () => {
-      if (abortController.signal.aborted) {
-        return;
-      }
-
       setConnectionState("disconnected");
 
       const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
       reconnectAttemptRef.current += 1;
 
       reconnectTimeoutRef.current = setTimeout(() => {
-        if (abortController.signal.aborted || abortControllerRef.current !== abortController) {
+        // Skip only if a newer connect() superseded this attempt (e.g. tenant/workbook change).
+        if (abortControllerRef.current !== abortController) {
           return;
         }
 
@@ -150,9 +147,11 @@ export function useSseSubscription(
 
             if (eventType === "SYNC_REQUIRED") {
               onSyncRequiredRef.current();
-              // Gap detected, client will perform a full sync. Close connection.
+              // Resume from current base watermark, not stale last event beyond retention.
+              lastEventIdRef.current = baseWatermarkRef.current;
+              // Gap detected — close stream and reconnect so handshake can re-fire after sync.
               abortController.abort();
-              setConnectionState("disconnected");
+              scheduleReconnect();
               return;
             }
 

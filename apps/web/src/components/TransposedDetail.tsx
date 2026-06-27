@@ -1,11 +1,29 @@
 import { useState, useEffect } from "react";
 import type { GridRow, GridColumn, CommandState } from "./SpreadsheetGrid";
+import { EMPTY_STATE_COPY } from "../lib/emptyStateCopy";
 
 interface TransposedDetailProps {
   row: GridRow | null;
   columns: GridColumn[];
   onCellEdit: (rowId: string, columnId: string, value: string) => void;
   commandStates: Map<string, CommandState>;
+  workbookId?: string;
+}
+
+function fieldStatusClass(state?: CommandState["state"]): string {
+  if (!state) return "";
+  if (state === "pending") return "detail-field--pending";
+  if (state === "committed") return "detail-field--committed";
+  if (state === "rejected") return "detail-field--rejected";
+  if (state === "ambiguous_requires_refresh") return "detail-field--ambiguous";
+  return "";
+}
+
+function statusLabel(state?: CommandState["state"], error?: string): string {
+  if (state === "pending") return "Saving";
+  if (state === "rejected") return error || "Rejected";
+  if (state === "ambiguous_requires_refresh") return "Refresh required";
+  return "";
 }
 
 export function TransposedDetail({
@@ -14,7 +32,7 @@ export function TransposedDetail({
   workbookId,
   onCellEdit,
   commandStates,
-}: TransposedDetailProps & { workbookId?: string }) {
+}: TransposedDetailProps) {
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const [editingField, setEditingField] = useState<string | null>(null);
 
@@ -29,21 +47,9 @@ export function TransposedDetail({
 
   if (!row) {
     return (
-      <div
-        style={{
-          padding: "24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-          color: "#475569",
-          fontStyle: "italic",
-          fontFamily: "'Inter', sans-serif",
-          fontSize: "13px",
-          textAlign: "center",
-        }}
-      >
-        Select a row gutter in the spreadsheet to view details
+      <div className="empty-state">
+        <p className="empty-state__title">{EMPTY_STATE_COPY.detail.title}</p>
+        <p className="empty-state__hint">{EMPTY_STATE_COPY.detail.hint}</p>
       </div>
     );
   }
@@ -62,78 +68,45 @@ export function TransposedDetail({
   };
 
   return (
-    <div
-      style={{
-        padding: "16px",
-        height: "100%",
-        overflowY: "auto",
-        fontFamily: "'Inter', sans-serif",
-        color: "#cbd5e1",
-        fontSize: "13px",
-      }}
-    >
-      <div style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px", marginBottom: "16px" }}>
-        <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 600, color: "#f8fafc" }}>
-          Transposed Record Detail
-        </h3>
-        <p style={{ margin: "2px 0 0 0", color: "#64748b", fontSize: "11px" }}>
-          Row ID: <code>{row.rowId}</code>
+    <div className="panel-body">
+      <div style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--space-md)", marginBottom: "var(--space-lg)" }}>
+        <h3 className="panel-title">Record detail</h3>
+        <p style={{ margin: "var(--space-xs) 0 0", color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" }}>
+          Row <code style={{ fontFamily: "var(--font-mono)" }}>{row.rowId}</code>
         </p>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
         {columns.map((col) => {
           const wb = workbookId || "";
           const cellId = wb ? `${wb}:${row.rowId}:${col.columnId}` : `${row.rowId}:${col.columnId}`;
           const cmdState = commandStates.get(cellId);
-          const displayVal = cmdState && cmdState.state !== "rejected" ? cmdState.value : (editedValues[col.columnId] || "");
+          const displayVal =
+            cmdState && cmdState.state !== "rejected"
+              ? cmdState.value
+              : editedValues[col.columnId] || "";
           const isFieldEditing = editingField === col.columnId;
-
-          // Status colors
-          let borderStyle = "1px solid rgba(255,255,255,0.08)";
-          let backgroundStyle = "rgba(255,255,255,0.01)";
-          let statusText = "";
-
-          if (cmdState) {
-            if (cmdState.state === "pending") {
-              borderStyle = "1px solid #eab308";
-              backgroundStyle = "rgba(234, 179, 8, 0.05)";
-              statusText = "Saving...";
-            } else if (cmdState.state === "committed") {
-              borderStyle = "1px solid #22c55e";
-              backgroundStyle = "rgba(34, 197, 94, 0.05)";
-            } else if (cmdState.state === "rejected") {
-              borderStyle = "1px solid #ef4444";
-              backgroundStyle = "rgba(239, 68, 68, 0.05)";
-              statusText = cmdState.error || "Rejected";
-            } else if (cmdState.state === "ambiguous_requires_refresh") {
-              borderStyle = "1px solid #f97316";
-              backgroundStyle = "rgba(249, 115, 22, 0.05)";
-              statusText = "Ambiguous. Refresh required.";
-            }
-          }
+          const label = statusLabel(cmdState?.state, cmdState?.error);
 
           return (
-            <div
-              key={col.columnId}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "4px",
-                background: backgroundStyle,
-                border: borderStyle,
-                borderRadius: "6px",
-                padding: "8px 12px",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 600, color: "#64748b" }}>
-                <span style={{ textTransform: "uppercase", letterSpacing: "0.03em" }}>
-                  {col.label}
-                </span>
-                {statusText && (
-                  <span style={{ color: cmdState?.state === "rejected" ? "#ef4444" : "#eab308" }}>
-                    {statusText}
+            <div key={col.columnId} className={`detail-field ${fieldStatusClass(cmdState?.state)}`}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="detail-field-label">{col.label}</span>
+                {label && (
+                  <span
+                    className={`status-badge ${
+                      cmdState?.state === "rejected"
+                        ? "status-badge--danger"
+                        : cmdState?.state === "ambiguous_requires_refresh"
+                        ? "status-badge--ambiguous"
+                        : "status-badge--pending"
+                    }`}
+                  >
+                    {cmdState?.state === "pending" && <span className="status-dot status-dot--pending" />}
+                    {cmdState?.state === "ambiguous_requires_refresh" && (
+                      <span className="status-dot status-dot--ambiguous" />
+                    )}
+                    {label}
                   </span>
                 )}
               </div>
@@ -141,6 +114,7 @@ export function TransposedDetail({
               {isFieldEditing ? (
                 <input
                   type="text"
+                  className="input input--sm"
                   value={displayVal}
                   onChange={(e) => handleFieldChange(col.columnId, e.target.value)}
                   onBlur={() => handleFieldCommit(col.columnId)}
@@ -155,32 +129,27 @@ export function TransposedDetail({
                     }
                   }}
                   autoFocus
-                  style={{
-                    width: "100%",
-                    background: "rgba(0,0,0,0.5)",
-                    border: "none",
-                    outline: "2px solid #3b82f6",
-                    color: "#fff",
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                    fontFamily: "inherit",
-                    fontSize: "inherit",
-                    marginTop: "2px",
-                  }}
                 />
               ) : (
                 <div
+                  role="button"
+                  tabIndex={0}
+                  className="detail-field-value"
                   onClick={() => setEditingField(col.columnId)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setEditingField(col.columnId);
+                    }
+                  }}
                   style={{
-                    padding: "4px 0",
+                    padding: "var(--space-xs) 0",
                     cursor: "text",
-                    minHeight: "24px",
-                    display: "flex",
-                    alignItems: "center",
-                    color: "#e2e8f0",
+                    minHeight: 24,
+                    color: "var(--color-text)",
                   }}
                 >
-                  {displayVal || <span style={{ color: "#475569", fontStyle: "italic" }}>Empty</span>}
+                  {displayVal || <span style={{ color: "var(--color-text-muted)" }}>Empty</span>}
                 </div>
               )}
             </div>

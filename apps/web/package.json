@@ -9,7 +9,7 @@
     "typecheck": "tsc -p ../../tsconfig.smoke.json --pretty false",
     "build": "next build",
     "dev": "next dev -p ${WEB_PORT:-3000}",
-    "test": "node --test test/smoke.test.mjs"
+    "test": "node --experimental-strip-types --test test/smoke.test.mjs"
   },
   "dependencies": {
     "next": "^14.2.5",

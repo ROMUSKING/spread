@@ -14,7 +14,11 @@ const packages = [
 ];
 
 for (const pkg of packages) {
-  const result = spawnSync(process.execPath, ["--test", "test/smoke.test.mjs"], {
+  const testArgs =
+    pkg === "apps/web"
+      ? ["--experimental-strip-types", "--test", "test/smoke.test.mjs"]
+      : ["--test", "test/smoke.test.mjs"];
+  const result = spawnSync(process.execPath, testArgs, {
     cwd: path.resolve(pkg),
     stdio: "inherit",
   });
