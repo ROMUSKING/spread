@@ -34,6 +34,11 @@ assertPhase0RuntimeFlags();
 const PORT = Number(process.env.API_PORT || 3001);
 const DEFAULT_TENANT = '00000000-0000-0000-0000-000000000001'; // matches seed
 const DEFAULT_WORKBOOK = '00000000-0000-0000-0000-000000000002';
+const ALLOWED_WORKBOOKS = [
+  '00000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000003',
+  '00000000-0000-0000-0000-000000000004',
+];
 
 // In-memory tracer/metrics for Phase 0 (real OTEL later)
 const tracer = new InMemoryTracer();
@@ -96,6 +101,74 @@ class DemoCellUpdateHandler extends CommandHandlerBase<
   }
 }
 
+class DemoRowDeleteHandler extends CommandHandlerBase<
+  { rowId: string },
+  { rowId: string }
+> {
+  readonly commandType = 'row.delete';
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<{ rowId: string }>,
+    context: CommandExecutionContext,
+  ) {
+    const { rowId } = envelope.payload;
+    const tenant = envelope.tenantId;
+    const workbook = envelope.workbookId || DEFAULT_WORKBOOK;
+
+    await context.tx.query(
+      `DELETE FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3`,
+      [tenant, workbook, rowId],
+    );
+
+    return { rowId };
+  }
+}
+
+class DemoGraphNodeAddHandler extends CommandHandlerBase<
+  { id: string; label: string; kind: string; tags?: string[] },
+  { id: string; label: string; kind: string; tags?: string[] }
+> {
+  readonly commandType = 'graph.node.add';
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<{
+      id: string;
+      label: string;
+      kind: string;
+      tags?: string[];
+    }>,
+    context: CommandExecutionContext,
+  ) {
+    const { id, label, kind, tags = [] } = envelope.payload;
+    await context.tx.query(
+      `INSERT INTO workspace_nodes (id, label, kind, tags) VALUES ($1, $2, $3, $4)`,
+      [id, label, kind, tags],
+    );
+    return { id, label, kind, tags };
+  }
+}
+
+class DemoGraphEdgeAddHandler extends CommandHandlerBase<
+  { id: string; source: string; target: string; label: string },
+  { id: string; source: string; target: string; label: string }
+> {
+  readonly commandType = 'graph.edge.add';
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<{
+      id: string;
+      source: string;
+      target: string;
+      label: string;
+    }>,
+    context: CommandExecutionContext,
+  ) {
+    const { id, source, target, label } = envelope.payload;
+    await context.tx.query(
+      `INSERT INTO workspace_edges (id, source, target, label) VALUES ($1, $2, $3, $4)`,
+      [id, source, target, label],
+    );
+    return { id, source, target, label };
+  }
+}
+
 export async function startApi(): Promise<void> {
   const db = createPostgresQueryable();
   const outboxRepo = new OutboxRepository(db);
@@ -103,6 +176,9 @@ export async function startApi(): Promise<void> {
   // Register handlers (demo cell handler for vertical slice)
   const handlers = new Map<string, any>();
   handlers.set('cell.update', new DemoCellUpdateHandler());
+  handlers.set('row.delete', new DemoRowDeleteHandler());
+  handlers.set('graph.node.add', new DemoGraphNodeAddHandler());
+  handlers.set('graph.edge.add', new DemoGraphEdgeAddHandler());
 
   initCommandRoute(db, handlers);
   const connectionManager = new SseConnectionManager();
@@ -160,13 +236,13 @@ export async function startApi(): Promise<void> {
         const correlationId = req.headers['x-correlation-id']?.toString();
 
         // Client identity allowlist / validation at entry (fail fast before processor)
-        if (tenantId !== DEFAULT_TENANT || workbookId !== DEFAULT_WORKBOOK) {
+        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
           console.debug(
             '[pilot-demo] remapped non-pilot tenant/workbook to defaults',
           );
         }
         if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        if (workbookId !== DEFAULT_WORKBOOK) workbookId = DEFAULT_WORKBOOK;
+        if (!ALLOWED_WORKBOOKS.includes(workbookId)) workbookId = DEFAULT_WORKBOOK;
         // Fail fast on unknown (in non-pilot would reject; here force + log)
         if (!tenantId || !workbookId) {
           res.writeHead(400, { 'content-type': 'application/json' });
@@ -213,7 +289,7 @@ export async function startApi(): Promise<void> {
         let tenantId = req.headers['x-tenant-id']?.toString() || DEFAULT_TENANT;
         const wbHdr =
           req.headers['x-workbook-id']?.toString() || DEFAULT_WORKBOOK;
-        if (tenantId !== DEFAULT_TENANT || wbHdr !== DEFAULT_WORKBOOK) {
+        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(wbHdr)) {
           console.debug('[pilot-demo] remapped non-pilot for status');
         }
         if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
@@ -237,13 +313,13 @@ export async function startApi(): Promise<void> {
           url.searchParams.get('workbookId') ||
           req.headers['x-workbook-id']?.toString() ||
           DEFAULT_WORKBOOK;
-        if (tenantId !== DEFAULT_TENANT || workbookId !== DEFAULT_WORKBOOK) {
+        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
           console.debug(
             '[pilot-demo] remapped non-pilot tenant/workbook to defaults',
           );
         }
         if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        if (workbookId !== DEFAULT_WORKBOOK) workbookId = DEFAULT_WORKBOOK;
+        if (!ALLOWED_WORKBOOKS.includes(workbookId)) workbookId = DEFAULT_WORKBOOK;
         if (!tenantId || !workbookId) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid_client_identity' }));
@@ -258,10 +334,10 @@ export async function startApi(): Promise<void> {
           [tenantId, workbookId],
         );
 
-        const rows = result?.rows || result || [];
+        const cellRows = result?.rows || result || [];
         const rowMap = new Map<string, Record<string, string>>();
 
-        for (const row of rows) {
+        for (const row of cellRows) {
           const rowId = String(row.row_id);
           const columnId = String(row.column_id);
           const values = rowMap.get(rowId) ?? {};
@@ -269,17 +345,31 @@ export async function startApi(): Promise<void> {
           rowMap.set(rowId, values);
         }
 
+        const columnIds = [...new Set(cellRows.map((r: any) => r.column_id))] as string[];
+        const columns = columnIds.map((id: string) => ({ columnId: id, label: id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
             tenantId,
             workbookId,
+            columns,
             rows: [...rowMap.entries()].map(([rowId, values]) => ({
               rowId,
               values,
             })),
           }),
         );
+        return;
+      }
+
+      if (url.pathname === '/api/workspace/graph' && req.method === 'GET') {
+        const nodesRes = await db.query<any>('SELECT * FROM workspace_nodes');
+        const edgesRes = await db.query<any>('SELECT * FROM workspace_edges');
+        const nodes = nodesRes?.rows || [];
+        const edges = edgesRes?.rows || [];
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ nodes, edges }));
         return;
       }
 
@@ -292,13 +382,13 @@ export async function startApi(): Promise<void> {
           url.searchParams.get('workbookId') ||
           req.headers['x-workbook-id']?.toString() ||
           DEFAULT_WORKBOOK;
-        if (tenantId !== DEFAULT_TENANT || workbookId !== DEFAULT_WORKBOOK) {
+        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
           console.debug(
             '[pilot-demo] remapped non-pilot tenant/workbook to defaults',
           );
         }
         if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        if (workbookId !== DEFAULT_WORKBOOK) workbookId = DEFAULT_WORKBOOK;
+        if (!ALLOWED_WORKBOOKS.includes(workbookId)) workbookId = DEFAULT_WORKBOOK;
         if (!tenantId || !workbookId) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid_client_identity' }));

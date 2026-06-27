@@ -68,7 +68,8 @@ export function useSseSubscription(
       headers["Last-Event-ID"] = resumeWatermark;
     }
 
-    const url = `/api/events?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`;
+    const apiBase = typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:3001` : "";
+    const url = `${apiBase}/api/events?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`;
 
     setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
 
@@ -195,6 +196,13 @@ export function useSseSubscription(
         scheduleReconnect();
       });
   }, [tenantId, workbookId]);
+
+  useEffect(() => {
+    setEvents([]);
+    setLastEventId(null);
+    lastEventIdRef.current = null;
+    baseWatermarkRef.current = null;
+  }, [workbookId, tenantId]);
 
   useEffect(() => {
     connect();

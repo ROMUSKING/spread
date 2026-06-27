@@ -112,3 +112,16 @@ v0.16.1 addresses the runnable-bootstrap review without widening Phase 0 scope. 
 ```
 
 The release keeps TigerBeetle, pgvector, DuckDB, broker/CDC, full tiled UI, and external connector runtime outside the ordinary Phase 0 edit path.
+
+## 10. v0.16.1 Spreadsheet-Native UI/UX Enhancements
+
+To establish a true spreadsheet-native UX baseline, the vertical slice UI has been upgraded with the following specifications:
+- **Empty Row (Unbounded Entry):** Trailing empty row at the bottom of the grid which immediately updates local state and propagates mutations when the user starts typing.
+- **Dynamic Columns:** Columns are discovered from workbook metadata sent by the server, with dynamic header addition (+) support.
+- **Keyboard Navigation Model:** Tab wrapping across rows, Enter to move to the next column and wrap, F2/double-click to edit, type-to-enter cell values, and Delete/Backspace to clear.
+- **Filesystem Navigator:** Left sidebar file tree where categories act as folders, and workbooks as files. Because the category layout is graph-based, workbooks can reside in multiple folder paths and display adjacent connection links.
+- **Top Workbook Tabs & Split Screen:** Open workbooks are arranged as top tabs in the main pane, with a vertical split toggle supporting side-by-side comparative views.
+- **Bottom Sheet Tabs:** Tabs at the bottom of the active spreadsheet grid to toggle sub-views (Grid view, Transposed Detail Card, SVG relations graph).
+- **SVG Relational Graph:** Visual interactive SVG representation of workbook dependencies, enabling navigation on click.
+- **Transposed Detail view:** Vertical detail record editor that updates cells via transactional `cell.update` API commands.
+- **Dynamic Module/Application Switcher:** Integrated UI tabs switching between Sales Orders, Inventory Stock, and Purchase Ledger workbooks with strict server allowlist verification.

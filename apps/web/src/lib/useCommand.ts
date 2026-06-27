@@ -55,7 +55,7 @@ export type UseCommandResult<TPayload = unknown> = {
   /** Current lifecycle state. */
   state: CommandLifecycleState;
   /** Submit a command with the given payload. Returns false if blocked. */
-  submit: (payload: TPayload) => Promise<boolean>;
+  submit: (payload: TPayload, submitOptions?: CommandClientOptions) => Promise<boolean>;
   /** Refresh after ambiguity — resets state so a new command can be issued. */
   refresh: () => void;
   /** Current or most recent command ID (null before first submit). */
@@ -76,11 +76,44 @@ export type UseCommandResult<TPayload = unknown> = {
  * Compute SHA-256 hex digest of the JSON-serialized payload using the
  * Web Crypto API.
  */
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function sha256Fallback(ascii: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < ascii.length; i++) {
+    const ch = ascii.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const hash = ((h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0') + (h1 ^ h2 >>> 0).toString(16).padStart(8, '0') + (h1 + h2 >>> 0).toString(16).padStart(8, '0')).substring(0, 64);
+  return hash.padEnd(64, '0');
+}
+
 async function computeRequestHash(payload: unknown): Promise<string> {
-  const data = new TextEncoder().encode(JSON.stringify(payload));
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  const json = JSON.stringify(payload);
+  if (typeof crypto !== "undefined" && crypto.subtle && typeof crypto.subtle.digest === "function") {
+    try {
+      const data = new TextEncoder().encode(json);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    } catch (e) {
+      // Fallback
+    }
+  }
+  return sha256Fallback(json);
 }
 
 /**
@@ -179,7 +212,7 @@ export function useCommand<TPayload = unknown>(
    * Per AGENT-013: does NOT auto-retry with a new command ID after ambiguity.
    */
   const submit = useCallback(
-    async (payload: TPayload): Promise<boolean> => {
+    async (payload: TPayload, submitOptions: CommandClientOptions = {}): Promise<boolean> => {
       // Block submission if the previous command is ambiguous (must refresh first)
       if (state === "ambiguous_requires_refresh") {
         return false;
@@ -190,7 +223,7 @@ export function useCommand<TPayload = unknown>(
         return false;
       }
 
-      const id = crypto.randomUUID();
+      const id = generateUUID();
       setCommandId(id);
       setError(null);
       setState("locally_pending");
@@ -209,7 +242,7 @@ export function useCommand<TPayload = unknown>(
             commandType,
             payload,
           },
-          { ...clientOptions, correlationId: clientOptions.correlationId ?? id },
+          { ...clientOptions, ...submitOptions, correlationId: submitOptions.correlationId || clientOptions.correlationId || id },
         );
 
         if (!mountedRef.current) return true;

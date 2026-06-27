@@ -1,284 +1,416 @@
 /**
  * Page — AGENT-060
  *
- * Renders the pilot spreadsheet interface. Wires together the SpreadsheetGrid,
- * useCommand hook for updates, and useSseSubscription hook for live event streams.
- * Includes a premium dark layout, status panel, and ambiguity resolution controls.
+ * Renders the tiled spreadsheet-native ERP interface. Wires together the TiledWorkspace,
+ * dynamic graph explorer panel, workbook graph visualizations, transposed detail views,
+ * useCommand hooks for updates, and dynamic SseSubscriber components for active workbook channels.
  *
- * @see docs/plan/vertical-slice-acceptance-checklist.md
+ * @see docs/ui/tiled-workspace-graph-specification.md
  */
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { SpreadsheetGrid, type GridRow, type GridColumn, type CommandState } from "../components/SpreadsheetGrid";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { TiledWorkspace } from "../components/TiledWorkspace";
+import type { GridRow, GridColumn, CommandState } from "../components/SpreadsheetGrid";
+import type { WorkspaceNode, WorkspaceEdge } from "../components/ExplorerPanel";
 import { useCommand } from "../lib/useCommand";
 import { useSseSubscription } from "../lib/useSseSubscription";
 
-const COLUMNS: GridColumn[] = [
+const DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001";
+const ALLOWED_WORKBOOKS = [
+  "00000000-0000-0000-0000-000000000002",
+  "00000000-0000-0000-0000-000000000003",
+  "00000000-0000-0000-0000-000000000004",
+];
+
+const DEFAULT_COLUMNS: GridColumn[] = [
   { columnId: "item_name", label: "Item Name" },
   { columnId: "quantity", label: "Quantity" },
-  { columnId: "unit_price", label: "Unit Price ($)" },
-  { columnId: "total", label: "Total ($)" },
+  { columnId: "unit_price", label: "Unit Price" },
+  { columnId: "total", label: "Total" },
 ];
 
-const INITIAL_ROWS: GridRow[] = [
-  { rowId: "1", values: { item_name: "Premium Desk", quantity: "2", unit_price: "250.00", total: "500.00" } },
-  { rowId: "2", values: { item_name: "Ergonomic Chair", quantity: "5", unit_price: "180.00", total: "900.00" } },
-  { rowId: "3", values: { item_name: "Mechanical Keyboard", quantity: "10", unit_price: "85.00", total: "850.00" } },
-  { rowId: "4", values: { item_name: "USB-C Hub", quantity: "15", unit_price: "45.00", total: "675.00" } },
-  { rowId: "5", values: { item_name: "LED Monitor", quantity: "4", unit_price: "320.00", total: "1280.00" } },
-];
-
-type WorkbookRowsResponse = {
-  rows: Array<{
-    rowId: unknown;
-    values: unknown;
-  }>;
-};
-
-type CommittedCellUpdatePayload = {
-  rowId: string;
-  columnId: string;
-  value: string;
-};
+interface WorkbookResponse {
+  rows: Array<{ rowId: unknown; values: unknown }>;
+  columns?: Array<{ columnId: unknown; label: unknown }>;
+}
 
 function normalizeGridValue(value: unknown): string | null {
-  if (typeof value === "string") {
-    return value;
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (value === null) return "";
+  return null;
+}
+
+function parseWorkbookResponse(
+  payload: unknown
+): { rows: GridRow[]; columns: GridColumn[] } | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as WorkbookResponse;
+
+  if (!Array.isArray(data.rows)) return null;
+  const normalizedRows: GridRow[] = [];
+  for (const row of data.rows) {
+    if (!row || typeof row !== "object") return null;
+    const rowId = typeof row.rowId === "string" ? row.rowId.trim() : "";
+    if (!rowId || !row.values || typeof row.values !== "object" || Array.isArray(row.values)) return null;
+    const values: Record<string, string> = {};
+    for (const [columnId, value] of Object.entries(row.values as Record<string, unknown>)) {
+      const nv = normalizeGridValue(value);
+      if (nv !== null) values[columnId] = nv;
+    }
+    normalizedRows.push({ rowId, values });
   }
 
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? String(value) : null;
+  let parsedColumns: GridColumn[] | null = null;
+  if (Array.isArray(data.columns)) {
+    parsedColumns = [];
+    for (const col of data.columns) {
+      if (col && typeof col === "object") {
+        const c = col as Record<string, unknown>;
+        if (typeof c.columnId === "string" && typeof c.label === "string") {
+          parsedColumns.push({ columnId: c.columnId, label: c.label });
+        }
+      }
+    }
   }
 
-  if (typeof value === "boolean") {
-    return value ? "true" : "false";
-  }
+  return { rows: normalizedRows, columns: parsedColumns || DEFAULT_COLUMNS };
+}
 
-  if (value === null) {
-    return "";
-  }
+// Declarative SSE subscriber helper component per workbook ID
+interface SseSubscriberProps {
+  tenantId: string;
+  workbookId: string;
+  onEvent: (event: any) => void;
+  onSyncRequired: (workbookId: string) => void;
+}
+
+function SseSubscriber({ tenantId, workbookId, onEvent, onSyncRequired }: SseSubscriberProps) {
+  const handleSync = useCallback(() => {
+    onSyncRequired(workbookId);
+  }, [workbookId, onSyncRequired]);
+
+  const sse = useSseSubscription(tenantId, workbookId, handleSync);
+
+  useEffect(() => {
+    if (sse.events.length > 0) {
+      sse.events.forEach(onEvent);
+    }
+  }, [sse.events, onEvent]);
 
   return null;
 }
 
-function parseCommittedCellUpdatePayload(payload: unknown): CommittedCellUpdatePayload | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const maybePayload = payload as Record<string, unknown>;
-  const rowId = typeof maybePayload.rowId === "string" ? maybePayload.rowId.trim() : "";
-  const columnId = typeof maybePayload.columnId === "string" ? maybePayload.columnId.trim() : "";
-  const value = normalizeGridValue(maybePayload.value);
-
-  if (!rowId || !columnId || value === null) {
-    return null;
-  }
-
-  return { rowId, columnId, value };
-}
-
-function parseWorkbookRowsResponse(payload: unknown): GridRow[] | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const rows = (payload as WorkbookRowsResponse).rows;
-  if (!Array.isArray(rows)) {
-    return null;
-  }
-
-  const normalizedRows: GridRow[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== "object") {
-      return null;
-    }
-
-    const rowId = typeof row.rowId === "string" ? row.rowId.trim() : "";
-    if (!rowId || !row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
-      return null;
-    }
-
-    const values: Record<string, string> = {};
-    for (const [columnId, value] of Object.entries(row.values as Record<string, unknown>)) {
-      const normalizedValue = normalizeGridValue(value);
-      if (normalizedValue !== null) {
-        values[columnId] = normalizedValue;
-      }
-    }
-
-    normalizedRows.push({ rowId, values });
-  }
-
-  return normalizedRows;
-}
-
 export default function Page() {
-  const tenantId = "pilot-tenant";
-  const workbookId = "pilot-v1-small";
+  const tenantId = DEFAULT_TENANT;
 
-  const [rows, setRows] = useState<GridRow[]>(INITIAL_ROWS);
+  // Graph state
+  const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
+  const [edges, setEdges] = useState<WorkspaceEdge[]>([]);
 
-  // Keep track of the active/pending cell change
-  const [activeEdit, setActiveEdit] = useState<{
-    rowId: string;
-    columnId: string;
-    value: string;
-  } | null>(null);
+  // Workbooks state
+  const [workbookRows, setWorkbookRows] = useState<Record<string, GridRow[]>>({});
+  const [workbookColumns, setWorkbookColumns] = useState<Record<string, GridColumn[]>>({});
 
-  // Command hook for submitting updates
-  const cmd = useCommand<{ rowId: string; columnId: string; value: string }>("cell.update", {
-    tenantId,
-    timeoutMs: 10000,
-  });
+  // Active in-flight edits map: key is "workbookId:rowId:columnId"
+  const [activeEdits, setActiveEdits] = useState<Map<string, { workbookId: string; rowId: string; columnId: string; value: string }>>(new Map());
 
-  const refreshWorkbook = useCallback(
-    async (unlockAfterRefresh: boolean) => {
-      const response = await fetch(
-        `/api/workbooks?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`,
-        {
-          method: "GET",
-          headers: {
-            accept: "application/json",
-          },
+  // Set of workbook IDs currently visible in tiles
+  const [visibleWorkbookIds, setVisibleWorkbookIds] = useState<string[]>(ALLOWED_WORKBOOKS);
+
+  const nextRowIdRefs = useRef<Record<string, number>>({});
+
+  const apiBaseUrl = typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:3001`
+    : "http://localhost:3001";
+
+  // Commands hooks
+  const cellCmd = useCommand("cell.update", { tenantId, baseUrl: apiBaseUrl });
+  const deleteCmd = useCommand("row.delete", { tenantId, baseUrl: apiBaseUrl });
+  const nodeAddCmd = useCommand("graph.node.add", { tenantId, baseUrl: apiBaseUrl });
+  const edgeAddCmd = useCommand("graph.edge.add", { tenantId, baseUrl: apiBaseUrl });
+
+  // Load Graph nodes/edges
+  const refreshGraph = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/workspace/graph`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.nodes && data.edges) {
+          setNodes(data.nodes);
+          setEdges(data.edges);
         }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Workbook refresh failed (${response.status})`);
       }
+    } catch (e) {
+      console.error("Failed to fetch workspace graph:", e);
+    }
+  }, [apiBaseUrl]);
 
-      const nextRows = parseWorkbookRowsResponse(await response.json());
-      if (!nextRows) {
-        throw new Error("Workbook refresh returned an invalid row payload");
-      }
+  // Load Workbook rows/columns
+  const refreshWorkbook = useCallback(
+    async (workbookId: string) => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/api/workbooks?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`,
+          { method: "GET", headers: { accept: "application/json" } }
+        );
 
-      setRows(nextRows);
+        if (!response.ok) throw new Error(`Fetch failed (${response.status})`);
 
-      if (unlockAfterRefresh) {
-        setActiveEdit(null);
-        cmd.refresh();
+        const parsed = parseWorkbookResponse(await response.json());
+        if (!parsed) throw new Error("Invalid payload format");
+
+        setWorkbookRows((prev) => ({ ...prev, [workbookId]: parsed.rows }));
+        setWorkbookColumns((prev) => ({ ...prev, [workbookId]: parsed.columns }));
+
+        // Track max row ID for sequential additions
+        const maxId = parsed.rows.reduce((max, r) => {
+          const n = Number(r.rowId);
+          return !isNaN(n) && n > max ? n : max;
+        }, 0);
+        nextRowIdRefs.current[workbookId] = maxId + 1;
+      } catch (e) {
+        console.error(`Failed to refresh workbook ${workbookId}:`, e);
       }
     },
-    [cmd.refresh, tenantId, workbookId]
+    [tenantId, apiBaseUrl]
   );
 
-  // Handle server-forced full refresh
-  const handleSyncRequired = useCallback(() => {
-    console.warn("SYNC_REQUIRED received from outbox. Performing full workbook refresh.");
-
-    void refreshWorkbook(true).catch((error: unknown) => {
-      console.error("Workbook refresh failed after SYNC_REQUIRED:", error);
-    });
-  }, [refreshWorkbook]);
-
-  // SSE Subscription for live stream updates
-  const sse = useSseSubscription(tenantId, workbookId, handleSyncRequired);
-
+  // Initial loads
   useEffect(() => {
-    void refreshWorkbook(false).catch((error: unknown) => {
-      console.error("Initial workbook refresh failed; keeping seeded rows:", error);
-    });
-  }, [refreshWorkbook]);
+    void refreshGraph();
+    for (const wbId of ALLOWED_WORKBOOKS) {
+      void refreshWorkbook(wbId);
+    }
+  }, [refreshGraph, refreshWorkbook]);
 
-  // Apply inbound SSE events to local grid state
-  useEffect(() => {
-    if (sse.events.length === 0) return;
-    const latestEvent = sse.events[sse.events.length - 1];
-    const committedPayload =
-      latestEvent && latestEvent.eventType === "cell.update.committed"
-        ? parseCommittedCellUpdatePayload(latestEvent.payload)
-        : null;
+  // Handle SSE Events
+  const handleSseEvent = useCallback(
+    (event: any) => {
+      if (event.eventType === "cell.update.committed") {
+        const payload = event.payload;
+        if (!payload || typeof payload !== "object") return;
+        const rowId = String(payload.rowId);
+        const columnId = String(payload.columnId);
+        const value = normalizeGridValue(payload.value) || "";
+        const eventWorkbookId = event.workbookId || ALLOWED_WORKBOOKS[0];
 
-    if (committedPayload) {
-      setRows((prev) =>
-        prev.map((row) => {
-          if (row.rowId !== committedPayload.rowId) {
-            return row;
+        setWorkbookRows((prev) => {
+          const rows = prev[eventWorkbookId] || [];
+          const existing = rows.find((r) => r.rowId === rowId);
+          let nextRows = [...rows];
+
+          if (existing) {
+            nextRows = rows.map((row) => {
+              if (row.rowId !== rowId) return row;
+              const updatedValues = { ...row.values, [columnId]: value };
+
+              // Aggregation total recalculation
+              if (columnId === "quantity" || columnId === "unit_price") {
+                const qty = Number(updatedValues.quantity);
+                const price = Number(updatedValues.unit_price);
+                if (Number.isFinite(qty) && Number.isFinite(price)) {
+                  updatedValues.total = (qty * price).toFixed(2);
+                }
+              }
+              return { ...row, values: updatedValues };
+            });
+          } else {
+            nextRows.push({
+              rowId,
+              values: { [columnId]: value },
+            });
           }
 
-          const updatedValues: Record<string, string> = {
-            ...row.values,
-            [committedPayload.columnId]: committedPayload.value,
-          };
+          return { ...prev, [eventWorkbookId]: nextRows };
+        });
 
-          if (
-            committedPayload.columnId === "quantity" ||
-            committedPayload.columnId === "unit_price"
-          ) {
-            const quantity = Number(updatedValues.quantity);
-            const unitPrice = Number(updatedValues.unit_price);
+        // Clear active edits
+        setActiveEdits((prev) => {
+          const key = `${eventWorkbookId}:${rowId}:${columnId}`;
+          if (prev.has(key)) {
+            const next = new Map(prev);
+            next.delete(key);
+            return next;
+          }
+          return prev;
+        });
+      }
 
-            if (Number.isFinite(quantity) && Number.isFinite(unitPrice)) {
-              updatedValues.total = (quantity * unitPrice).toFixed(2);
+      if (event.eventType === "row.delete.committed") {
+        const payload = event.payload;
+        const deletedRowId = payload && typeof payload.rowId === "string" ? payload.rowId : null;
+        const eventWorkbookId = event.workbookId || ALLOWED_WORKBOOKS[0];
+        if (deletedRowId) {
+          setWorkbookRows((prev) => {
+            const rows = prev[eventWorkbookId] || [];
+            return {
+              ...prev,
+              [eventWorkbookId]: rows.filter((r) => r.rowId !== deletedRowId),
+            };
+          });
+        }
+      }
+
+      if (event.eventType === "graph.node.committed" || event.eventType === "graph.edge.committed") {
+        void refreshGraph();
+      }
+    },
+    [refreshGraph]
+  );
+
+  const handleSyncRequired = useCallback(
+    (wbId: string) => {
+      console.warn(`SYNC_REQUIRED received for ${wbId}`);
+      void refreshWorkbook(wbId);
+    },
+    [refreshWorkbook]
+  );
+
+  // ─── Workspace Callbacks ──────────────────────────────────
+  const handleCellEdit = useCallback(
+    async (workbookId: string, rowId: string, columnId: string, value: string) => {
+      const rows = workbookRows[workbookId] || [];
+      const row = rows.find((r) => r.rowId === rowId);
+      const oldVal = row ? row.values[columnId] || "" : "";
+      if (oldVal === value) return;
+
+      const key = `${workbookId}:${rowId}:${columnId}`;
+      setActiveEdits((prev) => {
+        const next = new Map(prev);
+        next.set(key, { workbookId, rowId, columnId, value });
+        return next;
+      });
+
+      // Optimistic layout update
+      setWorkbookRows((prev) => {
+        const rws = prev[workbookId] || [];
+        const nextRows = rws.map((r) => {
+          if (r.rowId !== rowId) return r;
+          const updatedValues = { ...r.values, [columnId]: value };
+          if (columnId === "quantity" || columnId === "unit_price") {
+            const qty = Number(updatedValues.quantity);
+            const price = Number(updatedValues.unit_price);
+            if (Number.isFinite(qty) && Number.isFinite(price)) {
+              updatedValues.total = (qty * price).toFixed(2);
             }
           }
+          return { ...r, values: updatedValues };
+        });
+        return { ...prev, [workbookId]: nextRows };
+      });
 
-          return { ...row, values: updatedValues };
-        })
-      );
+      const success = await cellCmd.submit({ rowId, columnId, value }, { workbookId });
+      if (!success) {
+        // Rollback optimistic state
+        setActiveEdits((prev) => {
+          const next = new Map(prev);
+          next.delete(key);
+          return next;
+        });
+        void refreshWorkbook(workbookId);
+      }
+    },
+    [workbookRows, cellCmd, refreshWorkbook]
+  );
 
-      setActiveEdit((current) => {
-        if (
-          current &&
-          current.rowId === committedPayload.rowId &&
-          current.columnId === committedPayload.columnId
-        ) {
-          return null;
-        }
+  const handleCreateRow = useCallback(
+    (workbookId: string): string => {
+      const currentNextId = nextRowIdRefs.current[workbookId] || 1;
+      const newRowId = String(currentNextId);
+      nextRowIdRefs.current[workbookId] = currentNextId + 1;
 
-        return current;
+      const cols = workbookColumns[workbookId] || DEFAULT_COLUMNS;
+      const emptyValues: Record<string, string> = {};
+      cols.forEach((c) => {
+        emptyValues[c.columnId] = "";
+      });
+
+      const newRow: GridRow = { rowId: newRowId, values: emptyValues };
+      setWorkbookRows((prev) => ({
+        ...prev,
+        [workbookId]: [...(prev[workbookId] || []), newRow],
+      }));
+
+      return newRowId;
+    },
+    [workbookColumns]
+  );
+
+  const handleDeleteRow = useCallback(
+    async (workbookId: string, rowId: string) => {
+      setWorkbookRows((prev) => {
+        const rws = prev[workbookId] || [];
+        return { ...prev, [workbookId]: rws.filter((r) => r.rowId !== rowId) };
+      });
+      await deleteCmd.submit({ rowId }, { workbookId });
+    },
+    [deleteCmd]
+  );
+
+  const handleAddColumn = useCallback(
+    (workbookId: string, columnId: string, label: string) => {
+      setWorkbookColumns((prev) => {
+        const cols = prev[workbookId] || [];
+        if (cols.some((c) => c.columnId === columnId)) return prev;
+        return { ...prev, [workbookId]: [...cols, { columnId, label }] };
+      });
+    },
+    []
+  );
+
+  const handleAddWorkbook = useCallback(
+    async (label: string, categoryId: string) => {
+      const id = "wb-" + Math.random().toString(36).substr(2, 9);
+      // Submit new workbook node
+      await nodeAddCmd.submit({ id, label, kind: "workbook", tags: [label.toLowerCase()] });
+      // Submit structural contain edge
+      const edgeId = `${categoryId}:${id}`;
+      await edgeAddCmd.submit({ id: edgeId, source: categoryId, target: id, label: "contains" });
+      void refreshGraph();
+    },
+    [nodeAddCmd, edgeAddCmd, refreshGraph]
+  );
+
+  const handleAddCategory = useCallback(
+    async (label: string) => {
+      const id = "cat-" + Math.random().toString(36).substr(2, 9);
+      await nodeAddCmd.submit({ id, label, kind: "category", tags: [] });
+      void refreshGraph();
+    },
+    [nodeAddCmd, refreshGraph]
+  );
+
+  const handleAddEdge = useCallback(
+    async (source: string, target: string, label: string) => {
+      const id = `${source}:${target}`;
+      await edgeAddCmd.submit({ id, source, target, label });
+      void refreshGraph();
+    },
+    [edgeAddCmd, refreshGraph]
+  );
+
+  // Derive active commandStates map
+  const commandStates = new Map<string, CommandState>();
+  for (const [key, edit] of activeEdits) {
+    let visualState: CommandState["state"] = "pending";
+    if (cellCmd.state === "committed") visualState = "committed";
+    else if (cellCmd.state === "rejected" || cellCmd.state === "failed") visualState = "rejected";
+
+    // Split key back to rowId:columnId
+    const parts = key.split(":");
+    const rowId = parts[1];
+    const columnId = parts[2];
+    if (rowId && columnId) {
+      commandStates.set(`${rowId}:${columnId}`, {
+        state: visualState,
+        value: edit.value,
+        error: cellCmd.error?.message,
       });
     }
-  }, [sse.events]);
-
-  const handleCellEdit = async (rowId: string, columnId: string, value: string) => {
-    // 1. Calculate cell-specific change to check if it's actually different
-    const row = rows.find((r) => r.rowId === rowId);
-    const oldVal = row ? row.values[columnId] || "" : "";
-    if (oldVal === value) return;
-
-    // 2. Set the active optimistic update cell
-    setActiveEdit({ rowId, columnId, value });
-
-    // 3. Submit through the command API
-    const success = await cmd.submit({ rowId, columnId, value });
-    if (!success) {
-      // Submission blocked (e.g. rate limit, or ambiguity lock)
-      setActiveEdit(null);
-    }
-  };
-
-  // Derive visual commandStates map for Grid Component
-  const commandStates = new Map<string, CommandState>();
-  if (activeEdit) {
-    const cellId = `${activeEdit.rowId}:${activeEdit.columnId}`;
-    let visualState: CommandState["state"] = "pending";
-
-    if (cmd.state === "committed") {
-      visualState = "committed";
-    } else if (cmd.state === "rejected") {
-      visualState = "rejected";
-    } else if (cmd.state === "failed") {
-      visualState = "rejected";
-    } else if (cmd.state === "ambiguous_requires_refresh") {
-      visualState = "ambiguous_requires_refresh";
-    }
-
-    commandStates.set(cellId, {
-      state: visualState,
-      value: activeEdit.value,
-      error: cmd.error?.message,
-    });
   }
-
-  // Copy helper for diagnostics
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
-
-  const isAmbiguous = cmd.state === "ambiguous_requires_refresh";
 
   return (
     <main
@@ -286,153 +418,58 @@ export default function Page() {
         minHeight: "100vh",
         background: "radial-gradient(circle at top left, #1e1e2f, #0d0d15)",
         color: "#f8fafc",
-        padding: "40px",
+        padding: "24px",
         fontFamily: "'Outfit', 'Inter', sans-serif",
       }}
     >
-      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        {/* Header section */}
-        <header style={{ marginBottom: "32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h1 style={{ fontSize: "28px", fontWeight: 700, margin: 0, background: "linear-gradient(135deg, #60a5fa, #3b82f6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Spreadsheet-Native ERP
-            </h1>
-            <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "14px" }}>
-              Phase 0 Vertical Slice Pilot — Tenant: <code>{tenantId}</code>
-            </p>
-          </div>
+      {/* Declarative SSE connections for all workbooks */}
+      {visibleWorkbookIds.map((wbId) => (
+        <SseSubscriber
+          key={wbId}
+          tenantId={tenantId}
+          workbookId={wbId}
+          onEvent={handleSseEvent}
+          onSyncRequired={handleSyncRequired}
+        />
+      ))}
 
-          {/* Connection Status panel */}
-          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-            <span
+      <div style={{ maxWidth: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Top Header info */}
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h1
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "6px 12px",
-                borderRadius: "20px",
-                fontSize: "12px",
-                fontWeight: 600,
-                background:
-                  sse.connectionState === "connected"
-                    ? "rgba(34, 197, 94, 0.1)"
-                    : sse.connectionState === "reconnecting"
-                    ? "rgba(249, 115, 22, 0.1)"
-                    : "rgba(239, 68, 68, 0.1)",
-                color:
-                  sse.connectionState === "connected"
-                    ? "#22c55e"
-                    : sse.connectionState === "reconnecting"
-                    ? "#f97316"
-                    : "#ef4444",
-                border: "1px solid currentColor",
+                fontSize: "20px",
+                fontWeight: 700,
+                margin: 0,
+                background: "linear-gradient(135deg, #60a5fa, #3b82f6)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
               }}
             >
-              <span
-                style={{
-                  width: "6px",
-                  height: "6px",
-                  borderRadius: "50%",
-                  background: "currentColor",
-                  boxShadow: "0 0 8px currentColor",
-                }}
-              />
-              Live Sync: {sse.connectionState}
-            </span>
+              Spreadsheet-Native ERP: Tiled Graph Workspace
+            </h1>
+            <p style={{ margin: "2px 0 0 0", color: "#475569", fontSize: "12px" }}>
+              Dynamic Multi-Workbook Splits & Category Graph Relations
+            </p>
           </div>
         </header>
 
-        {/* Warning banner on ambiguity lock */}
-        {isAmbiguous && (
-          <div
-            style={{
-              background: "rgba(249, 115, 22, 0.1)",
-              border: "1px solid #f97316",
-              borderRadius: "8px",
-              padding: "16px",
-              marginBottom: "24px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <h4 style={{ margin: 0, color: "#f97316", fontWeight: 600 }}>Command Outcome Unknown</h4>
-              <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#cbd5e1" }}>
-                A connection interruption occurred. Retries are locked until workbook state is refreshed.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                void refreshWorkbook(true).catch((error: unknown) => {
-                  console.error("Workbook refresh failed while unlocking ambiguity:", error);
-                });
-              }}
-              style={{
-                background: "#f97316",
-                color: "#fff",
-                border: "none",
-                padding: "8px 16px",
-                borderRadius: "6px",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "background 0.2s",
-              }}
-            >
-              Refresh &amp; Unlock
-            </button>
-          </div>
-        )}
-
-        {/* Spreadsheet grid */}
-        <section style={{ marginBottom: "32px" }}>
-          <SpreadsheetGrid
-            rows={rows}
-            columns={COLUMNS}
-            onCellEdit={handleCellEdit}
-            commandStates={commandStates}
-          />
-        </section>
-
-        {/* Footer / Diagnostics panel */}
-        <footer style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px", padding: "20px" }}>
-          <h3 style={{ fontSize: "14px", fontWeight: 600, margin: "0 0 12px 0", color: "#94a3b8" }}>Diagnostics Console</h3>
-          
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", fontSize: "12px" }}>
-            <div>
-              <span style={{ color: "#64748b" }}>Command Substrate Status:</span>
-              <div style={{ fontWeight: 600, color: cmd.state !== "idle" ? "#eab308" : "#94a3b8", marginTop: "4px" }}>
-                {cmd.state} {cmd.elapsedMs > 0 && `(${Math.floor(cmd.elapsedMs / 1000)}s elapsed)`}
-              </div>
-            </div>
-
-            <div>
-              <span style={{ color: "#64748b" }}>Last Command ID:</span>
-              {cmd.commandId ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-                  <code style={{ background: "rgba(0,0,0,0.3)", padding: "2px 6px", borderRadius: "4px" }}>
-                    {cmd.commandId}
-                  </code>
-                  <button
-                    onClick={() => copyToClipboard(cmd.commandId!)}
-                    style={{ background: "transparent", border: "none", color: "#60a5fa", cursor: "pointer", padding: 0 }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              ) : (
-                <div style={{ color: "#64748b", marginTop: "4px" }}>None</div>
-              )}
-            </div>
-
-            <div>
-              <span style={{ color: "#64748b" }}>Sync High Watermark:</span>
-              <div style={{ fontWeight: 600, marginTop: "4px" }}>
-                {sse.lastEventId ? `outbox_id: ${sse.lastEventId}` : "Waiting for updates..."}
-              </div>
-            </div>
-          </div>
-        </footer>
+        {/* Tiled Workspace */}
+        <TiledWorkspace
+          nodes={nodes}
+          edges={edges}
+          workbookRows={workbookRows}
+          workbookColumns={workbookColumns}
+          commandStates={commandStates}
+          onCellEdit={handleCellEdit}
+          onCreateRow={handleCreateRow}
+          onDeleteRow={handleDeleteRow}
+          onAddColumn={handleAddColumn}
+          onAddWorkbook={handleAddWorkbook}
+          onAddCategory={handleAddCategory}
+          onAddEdge={handleAddEdge}
+        />
       </div>
     </main>
   );

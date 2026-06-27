@@ -82,6 +82,8 @@ export type CommandClientOptions = {
   traceId?: string;
   /** Tenant ID for multi-tenant routing. */
   tenantId?: string;
+  /** Workbook ID for multi-workbook routing. */
+  workbookId?: string;
   /** Optional external AbortSignal for caller-controlled cancellation. */
   signal?: AbortSignal;
 };
@@ -152,6 +154,9 @@ function buildHeaders(opts: CommandClientOptions): Record<string, string> {
   }
   if (opts.tenantId) {
     headers['x-tenant-id'] = opts.tenantId;
+  }
+  if (opts.workbookId) {
+    headers['x-workbook-id'] = opts.workbookId;
   }
   return headers;
 }

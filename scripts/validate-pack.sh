@@ -41,8 +41,8 @@ for old in scripts/repo-smoke.mjs scripts/smoke-typecheck.mjs; do
 done
 pass
 
-if find apps packages -type d -name dist | grep -q .; then find apps packages -type d -name dist >&2; fail "Generated dist directories are not allowed in source pack"; fi
-if find apps packages -type f \( -name '*.d.ts' -o -name '*.tsbuildinfo' -o -path '*/src/*.js' -o -path '*/src/*.js.map' \) | grep -q .; then find apps packages -type f \( -name '*.d.ts' -o -name '*.tsbuildinfo' -o -path '*/src/*.js' -o -path '*/src/*.js.map' \) >&2; fail "Generated declaration, emitted source JS, source maps, or tsbuildinfo files are not allowed in source pack"; fi
+if find apps packages -name node_modules -prune -o -type d -name dist -print | grep -q .; then find apps packages -name node_modules -prune -o -type d -name dist -print >&2; fail "Generated dist directories are not allowed in source pack"; fi
+if find apps packages -name node_modules -prune -o -type f \( -name '*.d.ts' ! -name 'next-env.d.ts' -o -name '*.tsbuildinfo' -o -path '*/src/*.js' -o -path '*/src/*.js.map' \) -print | grep -q .; then find apps packages -name node_modules -prune -o -type f \( -name '*.d.ts' ! -name 'next-env.d.ts' -o -name '*.tsbuildinfo' -o -path '*/src/*.js' -o -path '*/src/*.js.map' \) -print >&2; fail "Generated declaration, emitted source JS, source maps, or tsbuildinfo files are not allowed in source pack"; fi
 pass
 
 python3 - <<'PYVALID'
