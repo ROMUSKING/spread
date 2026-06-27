@@ -1,5 +1,6 @@
 {
   "fixture": "sales-positive",
+  "note": "Uses p1/p2/SO-001-L1 aligning with rich cross-linked seeds in postgres.ts InMemory (015 SalesOrders; rowId/line_id follow handler unpadded convention)",
   "rows": [
     {
       "rowId": "SO-001-L1",
@@ -16,10 +17,5 @@
       "unit_price": 250
     }
   ],
-  "expectedPartitions": [
-    [
-      "SO-001-L1",
-      "SO-001-L2"
-    ]
-  ]
+  "expectedPartitions": [["SO-001-L1", "SO-001-L2"]]
 }

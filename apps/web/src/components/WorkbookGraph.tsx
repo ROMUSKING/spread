@@ -11,8 +11,8 @@ interface WorkbookGraphProps {
   onAddEdge: (source: string, target: string, label: string) => void;
 }
 
-const GRAPH_WIDTH = 450;
-const GRAPH_HEIGHT = 350;
+const GRAPH_WIDTH = 900;
+const GRAPH_HEIGHT = 600;
 
 export function WorkbookGraph({
   nodes,
@@ -34,18 +34,53 @@ export function WorkbookGraph({
     const categoryNodes = nodes.filter((n) => n.kind === "category");
     const workbookNodes = nodes.filter((n) => n.kind === "workbook");
 
+    // Position category nodes horizontally spaced
     categoryNodes.forEach((node, idx) => {
       const spacing = GRAPH_WIDTH / (categoryNodes.length + 1);
-      positions[node.id] = { x: spacing * (idx + 1), y: 80 };
+      positions[node.id] = { x: spacing * (idx + 1), y: 70 };
     });
 
-    workbookNodes.forEach((node, idx) => {
-      const spacing = GRAPH_WIDTH / (workbookNodes.length + 1);
-      positions[node.id] = { x: spacing * (idx + 1), y: 240 };
+    // Group workbooks by their parent category
+    const categoryToWorkbooks: Record<string, string[]> = {};
+    categoryNodes.forEach((cat) => {
+      categoryToWorkbooks[cat.id] = [];
+    });
+    const orphans: string[] = [];
+
+    workbookNodes.forEach((wb) => {
+      const parentEdge = edges.find((e) => e.target === wb.id && e.label === "contains");
+      if (parentEdge) {
+        const list = categoryToWorkbooks[parentEdge.source];
+        if (list) {
+          list.push(wb.id);
+          return;
+        }
+      }
+      orphans.push(wb.id);
+    });
+
+    // Position workbooks under each category in a local 2-column grid to avoid label overlap
+    categoryNodes.forEach((cat) => {
+      const catPos = positions[cat.id]!;
+      const wbs = categoryToWorkbooks[cat.id]!;
+      wbs.forEach((wbId, idx) => {
+        const cols = 2;
+        const colIdx = idx % cols;
+        const rowIdx = Math.floor(idx / cols);
+        const xOffset = (colIdx - (cols - 1) / 2) * 160; // Spacing between columns
+        const yOffset = 110 + rowIdx * 90; // Spacing between rows
+        positions[wbId] = { x: catPos.x + xOffset, y: catPos.y + yOffset };
+      });
+    });
+
+    // Position orphans spaced at the bottom
+    orphans.forEach((wbId, idx) => {
+      const spacing = GRAPH_WIDTH / (orphans.length + 1);
+      positions[wbId] = { x: spacing * (idx + 1), y: GRAPH_HEIGHT - 80 };
     });
 
     return positions;
-  }, [nodes]);
+  }, [nodes, edges]);
 
   const handleNodeClick = (node: WorkspaceNode) => {
     if (linkingSourceId) {
@@ -182,7 +217,7 @@ export function WorkbookGraph({
                       x={(from.x + to.x) / 2}
                       y={(from.y + to.y) / 2 - 6}
                       fill={isHighlighted ? "var(--color-accent)" : "var(--color-text-muted)"}
-                      fontSize="9px"
+                      fontSize="10px"
                       textAnchor="middle"
                       fontWeight={isHighlighted ? 600 : 400}
                     >
@@ -201,7 +236,7 @@ export function WorkbookGraph({
               const isActive = activeWorkbookId === node.id;
               const isHighlighted = isNodeConnected(node.id);
               const isHovered = hoveredNodeId === node.id;
-              const radius = isCategory ? 16 : 18;
+              const radius = isCategory ? 18 : 20;
 
               return (
                 <g
@@ -236,7 +271,7 @@ export function WorkbookGraph({
                   <text
                     y={isCategory ? 4 : 3}
                     textAnchor="middle"
-                    fontSize={isCategory ? "9px" : "8px"}
+                    fontSize={isCategory ? "10px" : "9px"}
                     fontWeight={600}
                     fill={isActive ? "var(--color-accent)" : "var(--color-text-secondary)"}
                   >
@@ -244,9 +279,9 @@ export function WorkbookGraph({
                   </text>
 
                   <text
-                    y={isCategory ? 30 : 32}
+                    y={isCategory ? 34 : 36}
                     fill={isActive ? "var(--color-accent)" : isHovered ? "var(--color-text)" : "var(--color-text-secondary)"}
-                    fontSize="10px"
+                    fontSize="11px"
                     fontWeight={isActive || isHovered ? 600 : 400}
                     textAnchor="middle"
                   >

@@ -11,8 +11,10 @@ import { createPostgresQueryable } from "@erp/db";
 async function main() {
   const db = createPostgresQueryable();
   const migDir = join(process.cwd(), "packages/db/migrations");
-  // Only the 0001 for MVP
-  const files = ["0001_command_outbox_core.sql"];
+  const files = [
+    "0001_command_outbox_core.sql",
+    "0002_workspace_metadata_and_headers.sql"
+  ];
   for (const f of files) {
     const sql = readFileSync(join(migDir, f), "utf8");
     console.log(`[migrate] applying ${f}`);

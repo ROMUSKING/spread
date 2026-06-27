@@ -14,6 +14,13 @@ export const ALLOWED_WORKBOOKS = [
   "00000000-0000-0000-0000-000000000017", // Fulfillments
   "00000000-0000-0000-0000-000000000018", // SalesOrderHeaders
   "00000000-0000-0000-0000-000000000019", // PurchaseOrderHeaders
+  // Extended master data workbooks (from sme-extended-variants-and-entities-spec.md)
+  "00000000-0000-0000-0000-000000000021", // ProductTemplates
+  "00000000-0000-0000-0000-000000000022", // ProductVariants
+  "00000000-0000-0000-0000-000000000023", // Parties
+  "00000000-0000-0000-0000-000000000024", // Customers (extended)
+  "00000000-0000-0000-0000-000000000025", // Suppliers (extended)
+  "00000000-0000-0000-0000-000000000026", // Addresses
 ] as const;
 
 export type AllowedWorkbookId = (typeof ALLOWED_WORKBOOKS)[number];

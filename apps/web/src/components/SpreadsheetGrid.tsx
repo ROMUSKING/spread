@@ -65,6 +65,7 @@ export function SpreadsheetGrid({
   const [newColumnName, setNewColumnName] = useState("");
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
   const [draftWidths, setDraftWidths] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
   const newColInputRef = useRef<HTMLInputElement>(null);
@@ -75,8 +76,16 @@ export function SpreadsheetGrid({
   const resizePointerIdRef = useRef<number | null>(null);
   const resizeHandleRef = useRef<HTMLElement | null>(null);
 
-  const emptyRowIndex = rows.length;
-  const totalRowCount = rows.length + 1;
+  const filteredRows = searchQuery
+    ? rows.filter((row) =>
+        Object.values(row.values).some((val) =>
+          String(val).toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      )
+    : rows;
+
+  const emptyRowIndex = filteredRows.length;
+  const totalRowCount = filteredRows.length + 1;
   const canResize = Boolean(workbookId && onColumnWidthChange);
 
   useEffect(() => {
@@ -170,10 +179,10 @@ export function SpreadsheetGrid({
 
   const getRowAt = useCallback(
     (rowIndex: number): GridRow | null => {
-      if (rowIndex >= 0 && rowIndex < rows.length) return rows[rowIndex] ?? null;
+      if (rowIndex >= 0 && rowIndex < filteredRows.length) return filteredRows[rowIndex] ?? null;
       return null;
     },
-    [rows]
+    [filteredRows]
   );
 
   const finishEditing = useCallback(
@@ -411,6 +420,24 @@ export function SpreadsheetGrid({
 
   return (
     <div className="spreadsheet">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "var(--space-sm) var(--space-md)", borderBottom: "1px solid var(--color-border)", gap: "var(--space-md)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", flex: 1, maxWidth: 320 }}>
+          <span style={{ fontSize: "14px", color: "var(--color-text-muted)" }}>🔍</span>
+          <input
+            type="text"
+            className="input input--sm"
+            placeholder="Search grid cells..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: "100%" }}
+          />
+        </div>
+        {searchQuery && (
+          <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)" }}>
+            Found {filteredRows.length} of {rows.length} rows
+          </span>
+        )}
+      </div>
       <div className="spreadsheet-scroll">
         <table
           ref={tableRef}

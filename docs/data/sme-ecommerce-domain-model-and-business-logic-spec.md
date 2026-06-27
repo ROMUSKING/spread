@@ -29,7 +29,8 @@
 - `workbooks/inventory/batch-partition-policy.yml` (partitionKeys, foreignKeys, formulaReferences, customDomainRules)  
 - `docs/ui/spreadsheet-native-ux-specification.md` (dynamic columns, trailing empty row, cell.update, module switcher, transposed/relations)  
 
-**Related implementation files (cited throughout):**  
+**Related implementation files (cited throughout):**
+- Critical review & UX alternatives: `docs/data/sme-ecommerce-schema-critical-review-and-ux-alternatives.md` (recommended refinements for column metadata, action integration, cross-tile reactivity, grouped rendering, bypass mitigations)  
 - `apps/api/src/commands/CommandProcessor.ts` (Boundary A claim + Boundary B tx with ledger + outbox insert + command status)  
 - `apps/api/src/server.ts` (demo handlers for 'cell.update'/'row.delete', ALLOWED_WORKBOOKS, workbook query via current_cell_values, registration)  
 - `apps/api/src/routes/commands.ts`  
@@ -658,6 +659,8 @@ All open questions have been reviewed, alternatives considered, and resolved as 
 - `docs/gates/P0-*`, `docs/dev/client-optimistic-ui-and-conflicts.md`.
 - `tests/fixtures/batch/...`, `packages/db/migrations/0001...`.
 - Pilot dataset, ledgerability, numeric-ledger, batch-policy, command-lifecycle, ux-spec, schema-evolution-playbook.
+- Critical review: `docs/data/sme-ecommerce-schema-critical-review-and-ux-alternatives.md`
+- Business logic & tile views spec (workflows, command catalog, core application views, synergy analysis): `docs/data/sme-ecommerce-business-logic-and-tile-views-spec.md`
 - ADR-0014, ADR-0015, ADR-0016, ADR-0019 (ledger target), etc.
 
 ---

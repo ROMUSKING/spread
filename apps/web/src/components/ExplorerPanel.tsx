@@ -46,9 +46,23 @@ export function ExplorerPanel({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
   const [showAddWb, setShowAddWb] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const categories = nodes.filter((n) => n.kind === "category");
   const workbooks = nodes.filter((n) => n.kind === "workbook");
+
+  const matchesSearch = (label: string, tags: string[] = []) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return label.toLowerCase().includes(q) || tags.some(t => t.toLowerCase().includes(q));
+  };
+
+  const filteredCategories = categories.filter((cat) => {
+    if (!searchQuery) return true;
+    if (cat.label.toLowerCase().includes(searchQuery.toLowerCase())) return true;
+    const childSheets = getWorkbooksInFolder(cat.id);
+    return childSheets.some((sheet) => matchesSearch(sheet.label, sheet.tags));
+  });
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => ({ ...prev, [folderId]: !(prev[folderId] ?? true) }));
@@ -97,11 +111,22 @@ export function ExplorerPanel({
 
   return (
     <div className="panel-body" role="tree" aria-label="Workbook navigator">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-lg)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
         <h3 className="panel-title">Navigator</h3>
         <button type="button" className="btn btn--primary" onClick={() => setAddingCategory(true)}>
           Add category
         </button>
+      </div>
+
+      <div style={{ marginBottom: "var(--space-md)" }}>
+        <input
+          type="text"
+          className="input input--sm"
+          placeholder="Search workbooks, categories, tags..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ width: "100%" }}
+        />
       </div>
 
       {addingCategory && (
@@ -140,9 +165,11 @@ export function ExplorerPanel({
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-        {categories.map((cat) => {
-          const isExpanded = expandedFolders[cat.id] ?? true;
-          const childSheets = getWorkbooksInFolder(cat.id);
+        {filteredCategories.map((cat) => {
+          const isExpanded = searchQuery ? true : (expandedFolders[cat.id] ?? true);
+          const childSheets = getWorkbooksInFolder(cat.id).filter((sheet) =>
+            matchesSearch(sheet.label, sheet.tags)
+          );
 
           return (
             <div key={cat.id} role="group">

@@ -1,0 +1,14 @@
+version: 0.17.0
+workbook: customers
+partitionKeys:
+  - customerId
+  - partyId
+foreignKeys:
+  - field: partyId
+    references: parties.id
+formulaReferences: []
+aggregateDependencies: []
+customDomainRules:
+  - name: positiveCreditLimit
+    expression: "credit_limit >= 0"
+fallbackBehavior: reject

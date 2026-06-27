@@ -1,0 +1,24 @@
+version: 0.17.0
+workbook: products
+partitionKeys:
+  - productId
+  - templateId
+foreignKeys:
+  - field: templateId
+    references: product_templates.id
+formulaReferences:
+  - field: total_price
+    dependsOn:
+      - base_price
+      - price_delta
+  - field: total_cost
+    dependsOn:
+      - base_cost
+      - cost_delta
+aggregateDependencies: []
+customDomainRules:
+  - name: positiveBasePrice
+    expression: "base_price >= 0"
+  - name: positiveBaseCost
+    expression: "base_cost >= 0"
+fallbackBehavior: reject

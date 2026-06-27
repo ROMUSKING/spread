@@ -288,6 +288,8 @@ test('ci://tests/batch/partition-policy-validation', () => {
       productId: r.productId,
       warehouseId: r.warehouseId,
       quantity: r.quantity,
+      quantity_on_hand: r.quantity,
+      quantity_reserved: 0,
     },
   }));
 
@@ -326,6 +328,8 @@ test('ci://tests/batch/partition-policy-negative', () => {
       productId: r.productId,
       warehouseId: r.warehouseId,
       quantity: r.quantity,
+      quantity_on_hand: r.quantity,
+      quantity_reserved: 0,
     },
   }));
 
@@ -342,7 +346,7 @@ test('ci://tests/fuzz/batch-partitioner', () => {
     const wid = `w${Math.floor(i / 10)}`;
     mutations.push({
       rowId: `r${i}`,
-      fields: { productId: pid, warehouseId: wid, quantity: 10 },
+      fields: { productId: pid, warehouseId: wid, quantity: 10, quantity_on_hand: 10, quantity_reserved: 0 },
     });
   }
 
@@ -353,7 +357,7 @@ test('ci://tests/fuzz/batch-partitioner', () => {
   }
 
   // Inject negative stock to trigger custom domain rule failure
-  mutations[50].fields.quantity = -5;
+  mutations[50].fields.quantity_on_hand = -5;
   assert.throws(() => {
     compilePartitions(mutations, policy);
   });
@@ -369,6 +373,8 @@ test('ci://tests/batch/union-find-10k-compile-budget', () => {
         productId: `p${Math.floor(i / 5)}`,
         warehouseId: `w${Math.floor(i / 5)}`,
         quantity: 10,
+        quantity_on_hand: 10,
+        quantity_reserved: 0,
       },
     });
   }
@@ -394,6 +400,8 @@ test('ci://benchmarks/BENCH-BATCH-001', () => {
         productId: `p${Math.floor(i / 2)}`,
         warehouseId: `w${Math.floor(i / 2)}`,
         quantity: 5,
+        quantity_on_hand: 5,
+        quantity_reserved: 0,
       },
     });
   }
@@ -1839,3 +1847,129 @@ test('ci://tests/rate-limit/high-risk-command-postgres-ceiling', () => {
 test('ci://tests/rate-limit/no-ordinary-edit-pg-counter-write', () => {
   assert.ok(true);
 });
+
+test('ci://tests/domain/extended-master-data-handlers', async () => {
+  const {
+    ProductTemplateCreateHandler,
+    ProductVariantCreateHandler,
+    PartyCreateHandler,
+    CustomerCreateHandler,
+    SupplierCreateHandler,
+    AddressCreateHandler,
+  } = await import('../apps/api/src/commands/handlers/MasterDataHandlers.ts');
+
+  // Simple mock database that stores current_cell_values in a map to verify queries and upserts
+  const cellsMap = new Map();
+  const dbQueries = [];
+  const mockDb = {
+    query: async (sql, params) => {
+      const s = sql.trim().replace(/\s+/g, ' ');
+      dbQueries.push({ sql: s, params });
+      if (s.includes('INSERT INTO current_cell_values')) {
+        const [tenant, wb, row, col, val] = params;
+        cellsMap.set(`${tenant}:${wb}:${row}:${col}`, val);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT value_text FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4')) {
+        const [tenant, wb, row, col] = params;
+        const val = cellsMap.get(`${tenant}:${wb}:${row}:${col}`);
+        return { rows: val !== undefined ? [{ value_text: val }] : [] };
+      }
+      if (s.includes('SELECT value_text FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 LIMIT 1')) {
+        const [tenant, wb, row] = params;
+        // Check if any key starts with tenant:wb:row:
+        const prefix = `${tenant}:${wb}:${row}:`;
+        const exists = Array.from(cellsMap.keys()).some(k => k.startsWith(prefix));
+        return { rows: exists ? [{ value_text: 'exists' }] : [] };
+      }
+      if (s.includes('SELECT command_status')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const handlersMap = new Map([
+    ['productTemplate.create', new ProductTemplateCreateHandler()],
+    ['productVariant.create', new ProductVariantCreateHandler()],
+    ['party.create', new PartyCreateHandler()],
+    ['customer.create', new CustomerCreateHandler()],
+    ['supplier.create', new SupplierCreateHandler()],
+    ['address.create', new AddressCreateHandler()],
+  ]);
+
+  const p = new CommandProcessor(mockDb, handlersMap);
+
+  // 1. Create product template
+  const res1 = await p.processCommand('t1', 'u1', {
+    commandId: 'cmd-t1',
+    commandType: 'productTemplate.create',
+    payload: {
+      templateId: 'tmpl1',
+      name: 'Desk Template',
+      basePrice: '200.00',
+      baseCost: '100.00'
+    },
+    workbookId: '00000000-0000-0000-0000-000000000021'
+  }, null, null, '00000000-0000-0000-0000-000000000021');
+  assert.equal(res1.status, 'committed');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000021:tmpl1:name'), 'Desk Template');
+
+  // 2. Create product variant with valid template
+  const res2 = await p.processCommand('t1', 'u1', {
+    commandId: 'cmd-v1',
+    commandType: 'productVariant.create',
+    payload: {
+      productId: 'v1',
+      templateId: 'tmpl1',
+      optionColor: 'Red',
+      priceDelta: '10.00'
+    },
+    workbookId: '00000000-0000-0000-0000-000000000022'
+  }, null, null, '00000000-0000-0000-0000-000000000022');
+  assert.equal(res2.status, 'committed');
+
+  // 3. Create variant with invalid template (referential integrity failure)
+  const res3 = await p.processCommand('t1', 'u1', {
+    commandId: 'cmd-v2',
+    commandType: 'productVariant.create',
+    payload: {
+      productId: 'v2',
+      templateId: 'invalid-tmpl',
+    },
+    workbookId: '00000000-0000-0000-0000-000000000022'
+  }, null, null, '00000000-0000-0000-0000-000000000022');
+  assert.equal(res3.status, 'failed');
+  assert.match(res3.problem.message, /REF_INTEGRITY/);
+
+  // 4. Create variant with price delta causing negative total price (invariant failure)
+  const res4 = await p.processCommand('t1', 'u1', {
+    commandId: 'cmd-v3',
+    commandType: 'productVariant.create',
+    payload: {
+      productId: 'v3',
+      templateId: 'tmpl1',
+      priceDelta: '-250.00'
+    },
+    workbookId: '00000000-0000-0000-0000-000000000022'
+  }, null, null, '00000000-0000-0000-0000-000000000022');
+  assert.equal(res4.status, 'failed');
+  assert.match(res4.problem.message, /PRICE_NEGATIVE/);
+
+  // 5. Create party with inline customer and supplier
+  const res5 = await p.processCommand('t1', 'u1', {
+    commandId: 'cmd-p1',
+    commandType: 'party.create',
+    payload: {
+      partyId: 'party1',
+      legalName: 'Entity One',
+      asCustomer: { creditLimit: '1000.00', paymentTerms: 'NET30' },
+      asSupplier: { leadTimeDays: '5', paymentTerms: 'NET15' }
+    },
+    workbookId: '00000000-0000-0000-0000-000000000023'
+  }, null, null, '00000000-0000-0000-0000-000000000023');
+  assert.equal(res5.status, 'committed');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000024:CUST-party1:credit_limit'), '1000.00');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000025:SUPP-party1:lead_time_days'), '5');
+});
+

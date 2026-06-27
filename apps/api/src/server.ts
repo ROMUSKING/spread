@@ -29,6 +29,14 @@ import {
   ProductCreateHandler,
 } from './commands/handlers/InventoryHandlers';
 import { SalesOrderCreateHandler } from './commands/handlers/SalesHandlers';
+import {
+  ProductTemplateCreateHandler,
+  ProductVariantCreateHandler,
+  PartyCreateHandler,
+  CustomerCreateHandler,
+  SupplierCreateHandler,
+  AddressCreateHandler,
+} from './commands/handlers/MasterDataHandlers';
 import type { CommandEnvelope } from '@erp/domain/commands/types';
 import { RateLimiter } from './http/RateLimiter';
 
@@ -55,6 +63,13 @@ const ALLOWED_WORKBOOKS = [
   '00000000-0000-0000-0000-000000000017', // Fulfillments
   '00000000-0000-0000-0000-000000000018', // SalesOrderHeaders
   '00000000-0000-0000-0000-000000000019', // PurchaseOrderHeaders
+  // Extended master data workbooks (from sme-extended-variants-and-entities-spec.md)
+  '00000000-0000-0000-0000-000000000021', // ProductTemplates
+  '00000000-0000-0000-0000-000000000022', // ProductVariants
+  '00000000-0000-0000-0000-000000000023', // Parties
+  '00000000-0000-0000-0000-000000000024', // Customers (extended)
+  '00000000-0000-0000-0000-000000000025', // Suppliers (extended)
+  '00000000-0000-0000-0000-000000000026', // Addresses
 ];
 
 // In-memory tracer/metrics for Phase 0 (real OTEL later)
@@ -203,6 +218,13 @@ export async function startApi(): Promise<void> {
   handlers.set('inventory.adjust', new InventoryAdjustHandler());
   handlers.set('product.create', new ProductCreateHandler());
   handlers.set('salesOrder.create', new SalesOrderCreateHandler());
+  // Extended master data handlers
+  handlers.set('productTemplate.create', new ProductTemplateCreateHandler());
+  handlers.set('productVariant.create', new ProductVariantCreateHandler());
+  handlers.set('party.create', new PartyCreateHandler());
+  handlers.set('customer.create', new CustomerCreateHandler());
+  handlers.set('supplier.create', new SupplierCreateHandler());
+  handlers.set('address.create', new AddressCreateHandler());
 
   initCommandRoute(db, handlers);
   const connectionManager = new SseConnectionManager();
@@ -260,9 +282,17 @@ export async function startApi(): Promise<void> {
         const correlationId = req.headers['x-correlation-id']?.toString();
 
         // Client identity allowlist / validation at entry (fail fast before rate/processor; explicit reject, no silent remap)
-        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
+        if (
+          tenantId !== DEFAULT_TENANT ||
+          !ALLOWED_WORKBOOKS.includes(workbookId)
+        ) {
           res.writeHead(400, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          res.end(
+            JSON.stringify({
+              error: 'invalid_client_identity',
+              message: 'unknown tenant or workbook',
+            }),
+          );
           return;
         }
         if (!tenantId || !workbookId) {
@@ -307,12 +337,19 @@ export async function startApi(): Promise<void> {
 
       if (url.pathname.startsWith('/api/commands/') && req.method === 'GET') {
         const commandId = url.pathname.split('/').pop() || '';
-        const tenantId = req.headers['x-tenant-id']?.toString() || DEFAULT_TENANT;
-        const wbHdr = req.headers['x-workbook-id']?.toString() || DEFAULT_WORKBOOK;
+        const tenantId =
+          req.headers['x-tenant-id']?.toString() || DEFAULT_TENANT;
+        const wbHdr =
+          req.headers['x-workbook-id']?.toString() || DEFAULT_WORKBOOK;
         // Fail fast explicit reject (no silent remap); wb threaded for future lookup match
         if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(wbHdr)) {
           res.writeHead(400, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          res.end(
+            JSON.stringify({
+              error: 'invalid_client_identity',
+              message: 'unknown tenant or workbook',
+            }),
+          );
           return;
         }
         const status = await getCommandStatusRoute(tenantId, commandId, wbHdr);
@@ -336,9 +373,17 @@ export async function startApi(): Promise<void> {
           req.headers['x-workbook-id']?.toString() ||
           DEFAULT_WORKBOOK;
         // Explicit 400 reject (no remap) for /workbooks
-        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
+        if (
+          tenantId !== DEFAULT_TENANT ||
+          !ALLOWED_WORKBOOKS.includes(workbookId)
+        ) {
           res.writeHead(400, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          res.end(
+            JSON.stringify({
+              error: 'invalid_client_identity',
+              message: 'unknown tenant or workbook',
+            }),
+          );
           return;
         }
         if (!tenantId || !workbookId) {
@@ -356,9 +401,16 @@ export async function startApi(): Promise<void> {
         );
 
         const cellRows = result?.rows || result || [];
+        // Lightweight column meta convention support (cells-based, no DDL per critical review):
+        // Rows with row_id starting '_' hold __type__/__enum__/__format__ style meta (e.g. status enum, price format).
+        // Filter them from main grid rows/columns for clean UI; meta remains queryable in store for future use.
+        // (Note: full client GridColumn type augmentation per original review rec is out of this data-seed scope; exclusion sufficient.)
+        const normalRows = cellRows.filter(
+          (r: any) => !String(r.row_id || '').startsWith('_'),
+        );
         const rowMap = new Map<string, Record<string, string>>();
 
-        for (const row of cellRows) {
+        for (const row of normalRows) {
           const rowId = String(row.row_id);
           const columnId = String(row.column_id);
           const values = rowMap.get(rowId) ?? {};
@@ -366,8 +418,13 @@ export async function startApi(): Promise<void> {
           rowMap.set(rowId, values);
         }
 
-        const columnIds = [...new Set(cellRows.map((r: any) => r.column_id))] as string[];
-        const columns = columnIds.map((id: string) => ({ columnId: id, label: id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }));
+        const columnIds = [
+          ...new Set(normalRows.map((r: any) => r.column_id)),
+        ] as string[];
+        const columns = columnIds.map((id: string) => ({
+          columnId: id,
+          label: id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        }));
 
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(
@@ -404,9 +461,17 @@ export async function startApi(): Promise<void> {
           req.headers['x-workbook-id']?.toString() ||
           DEFAULT_WORKBOOK;
         // Explicit 400 reject (no remap) for /events; wb for SSE demand
-        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
+        if (
+          tenantId !== DEFAULT_TENANT ||
+          !ALLOWED_WORKBOOKS.includes(workbookId)
+        ) {
           res.writeHead(400, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          res.end(
+            JSON.stringify({
+              error: 'invalid_client_identity',
+              message: 'unknown tenant or workbook',
+            }),
+          );
           return;
         }
         if (!tenantId || !workbookId) {
