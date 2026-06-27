@@ -2,7 +2,7 @@
 description: Spreadsheet-Native ERP Phase 0 authority boundaries
 alwaysApply: true
 ---
-Read `AGENTS.md` and `docs/snapshot-v0.16.1.md` before implementation.
+Read `AGENTS.md` and `docs/snapshot-v0.17.0.md` before implementation.
 
 Rules:
 - Mutations go through command handlers only.

@@ -1,6 +1,6 @@
 # Post-MVP Specialized Planes vNext
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Detailed post-MVP planning pack; not Phase 0 runtime scope  
 **Purpose:** Keep TigerBeetle, pgvector, DuckDB, outbox fan-out, external integration, and tiled UI detail out of the active Phase 0 spec while preserving the interface contracts needed for later adoption.
 

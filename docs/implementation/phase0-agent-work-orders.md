@@ -1,6 +1,6 @@
 # Phase 0 AI Agent Work Orders
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Status:** Active work-order catalog
 
@@ -8,7 +8,7 @@
 
 Each work order is intended to become one PR. A work order may be split into smaller PRs, but must not be combined with unrelated work unless the Engineering Lead approves the combined scope.
 
-Agents must read `docs/snapshot-v0.16.1.md`, `AGENTS.md`, `docs/implementation/ai-coding-agent-roadmap.md`, and the canonical docs listed in each work order before changing files. Work orders that touch covered command/outbox/ledger/retrieval boundaries must start from `docs/skeletons/`.
+Agents must read `docs/snapshot-v0.17.0.md`, `AGENTS.md`, `docs/implementation/ai-coding-agent-roadmap.md`, and the canonical docs listed in each work order before changing files. Work orders that touch covered command/outbox/ledger/retrieval boundaries must start from `docs/skeletons/`.
 
 ---
 
@@ -24,7 +24,7 @@ Agents must read `docs/snapshot-v0.16.1.md`, `AGENTS.md`, `docs/implementation/a
 AGENTS.md
 docs/pack-index.md
 docs/maintenance/normative-source-map.md
-docs/snapshot-v0.16.1.md
+docs/snapshot-v0.17.0.md
 scripts/validate-pack.sh
 .github/workflows/validate-pack.yml
 ```
@@ -692,6 +692,6 @@ ci://tests/process/no-post-mvp-plane-in-phase0-edit-path
 
 
 
-## v0.16.1 repository bootstrap note
+## v0.17.0 repository bootstrap note
 
 Agents must use `docs/implementation/project-directory-structure.md` and `docs/implementation/code-stub-index.md` before changing `apps/` or `packages/`.

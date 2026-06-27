@@ -77,7 +77,7 @@ test('ci://tests/process/agent-pr-template-present', () => {
 
 test('ci://tests/security/invariant-manifest-validation', () => {
   const content = fs.readFileSync('invariants/security-invariants.yml', 'utf8');
-  assert.ok(content.includes('version: 0.16.1'));
+  assert.ok(content.includes('version: 0.17.0'));
 });
 
 test('ci://tests/security/evidence-uri-scheme-validation', () => {
@@ -202,11 +202,15 @@ test('ci://tests/process/manifest-ci-uri-coverage', () => {
   );
 });
 
-function loadPolicy() {
-  const content = fs.readFileSync(
-    'workbooks/inventory/batch-partition-policy.yml',
-    'utf8',
-  );
+function loadPolicy(workbook = 'inventory') {
+  const paths = {
+    inventory: 'workbooks/inventory/batch-partition-policy.yml',
+    sales: 'workbooks/sales/batch-partition-policy.yml',
+    purchase: 'workbooks/purchase/batch-partition-policy.yml',
+    fulfillment: 'workbooks/fulfillment/batch-partition-policy.yml',
+  };
+  const p = paths[workbook] || paths.inventory;
+  const content = fs.readFileSync(p, 'utf8');
   const policy = {
     version: '',
     workbook: '',
@@ -292,7 +296,26 @@ test('ci://tests/batch/partition-policy-validation', () => {
   assert.equal(partitions[0].length, 2);
   const rowIds = partitions[0].map((m) => m.rowId).sort();
   assert.deepEqual(rowIds, ['r1', 'r2']);
+});
 
+// PR1: wire new ecom batch policies (sales + inventory) from design spec contracts
+test('ci://tests/batch/ecom-policies-load-and-partition', () => {
+  const salesPolicy = loadPolicy('sales');
+  assert.ok(salesPolicy.workbook === 'sales' || salesPolicy.partitionKeys.some(k => k.includes('order')));
+  const invPolicy = loadPolicy('inventory');
+  assert.ok(invPolicy.partitionKeys.includes('productId'));
+
+  const salesPos = JSON.parse(fs.readFileSync('tests/fixtures/batch/sales/positive.json', 'utf8'));
+  const salesMutations = salesPos.rows.map((r) => ({
+    rowId: r.rowId,
+    fields: { orderId: r.orderId, productId: r.productId, qty: r.qty, unit_price: r.unit_price },
+  }));
+  const salesParts = compilePartitions(salesMutations, salesPolicy);
+  assert.ok(salesParts.length >= 1);
+});
+
+test('ci://tests/batch/partition-policy-negative', () => {
+  const policy = loadPolicy();
   // Test negative fixture
   const negative = JSON.parse(
     fs.readFileSync('tests/fixtures/batch/inventory/negative.json', 'utf8'),

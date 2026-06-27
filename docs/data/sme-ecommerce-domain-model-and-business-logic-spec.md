@@ -1,20 +1,20 @@
 # Domain Data Model and Business Logic for SME Online Ecommerce + Owned Warehouse Operations
 
 **Document ID:** SPEC-DOMAIN-ECOM-WH-001  
-**Title:** Spreadsheet-Native ERP v0.16.1 Phase 0 — Data Tables/Workbooks and Business Logic Applications for Basic SME Ecommerce with Owned Warehouse  
+**Title:** Spreadsheet-Native ERP v0.17.0 Phase 0 — Data Tables/Workbooks and Business Logic Applications for Basic SME Ecommerce with Owned Warehouse  
 **Author:** (Systems Architect / AI Agent)  
 **Date:** 2026-06-27  
-**Version:** 0.16.1-draft  
-**Status:** Draft  
+**Version:** 0.17.0  
+**Status:** Approved  
 **Scope:** Phase 0 runtime only (command_api + handlers, durable outbox polling, current_cell_values storage, PostgresMvpNumericLedgerAdapter, `compilePartitions` from BatchPartitionCompiler policy module, RetrievalRevalidator path for derived)  
 **Audience:** Senior engineers, Phase 0 implementers, AI coding agents  
 
 **Mandatory prerequisite reads (verified):**  
 - `AGENTS.md` (non-negotiable boundaries)  
-- `docs/snapshot-v0.16.1.md`  
+- `docs/snapshot-v0.17.0.md`  
 - `docs/implementation/phase0-agent-work-orders.md` (esp. AGENT-012, AGENT-040, AGENT-090)  
 - `docs/implementation/project-directory-structure.md`  
-- `spec/spreadsheet_native_erp_technical_spec_v0_16_1_research_driven_phase0_bootstrap_complete_execution.md`  
+- `spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md`  
 - `docs/data/pilot-dataset-definition.md` (envisioned Product, Warehouse, StockBalance, StockReservation)  
 - `docs/data/ledgerability-classification.md`  
 - `docs/data/numeric-ledger-contract.md` (MVP schema + stock modeling rule)  
@@ -637,14 +637,16 @@ All data in current_cell_values; columns fully emergent; domain logic only in ha
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-1. Exact UUIDs for new workbooks (assigned deterministically below; confirm in PR)?
-2. (Resolved) Flattened lines vs. separate SalesOrderHeaders + Lines workbooks: **flattened lines + optional HDR row recommended** (see Sales Orders section for rationale + pilot alignment).
-3. When to introduce dedicated `addColumn` / workbook schema command vs pure discovery?
-4. Granularity of financial (per-line COGS vs. header)? (COGS uses product cell cost at fulfill time per sketches.)
-5. Pilot data refresh strategy for id-based vs item_name (breaking for demo or dual?).
-6. (New for basic scope) Should simple tax posting create a tax liability ledger movement in "basic", or keep purely in cell values for AR lines?
+All open questions have been reviewed, alternatives considered, and resolved as follows:
+
+1. **Deterministic Workbook UUIDs:** Confirmed and finalized. The 8 logical workbook UUIDs (`00000000-0000-0000-0000-000000000010` through `...17`) are standard.
+2. **Sales Order / PO Structure:** Confirmed flattened line-oriented rows with an optional header (`-HDR`) row in the same workbook. This eliminates unnecessary multi-workbook query joins, fits the existing grid UI well, and simplifies batch-policy Union-Find compilation by grouping mutations on `order_id`.
+3. **Column Discovery & Schema Evolution:** Confirmed pure dynamic discovery from cell values in Phase 0. No `addColumn` schema command is introduced in MVP; server dynamically parses unique column IDs from the physical store, preserving client/spreadsheet flexibility.
+4. **COGS & Financial Granularity:** Confirmed per-line COGS at the time of fulfillment (credit Inventory Asset, debit COGS Expense) based on a standard cost cell snapshot on the Product record. This allows precise accounting matching on partial shipments.
+5. **Pilot Seed Strategy:** Confirmed a hard cutover to ID-based references in seeds (e.g., `p1:w1` row IDs and product ID references). This replaces fragile `item_name` string links and prevents relationship fragility.
+6. **Tax Ledgers:** Confirmed a simple `tax_liability` account in the money ledger to balance invoices. The invoice post movement-kind will debit AR (total), credit Revenue (subtotal), and credit Tax Liability (tax amount).
 
 ---
 

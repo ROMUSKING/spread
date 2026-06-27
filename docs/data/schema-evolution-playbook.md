@@ -19,6 +19,19 @@ Prevent schema drift across the main spec, gates, ADRs, and developer docs.
 
 No other file may contain canonical `CREATE TABLE` definitions for these schemas.
 
+## Canonical logical domain contracts (Phase 0 spreadsheet workbooks/tables)
+
+For Phase 0, *logical* workbook / data table contracts (column definitions, partition keys, row ID conventions, relations, basic validation rules) for domain areas such as ecommerce + warehouse operations are documented in:
+
+- `docs/data/pilot-dataset-definition.md` (Ecommerce + Owned Warehouse Logical Workbooks subsection, UUIDs, columns, fixtures)
+- Cross-referenced detailed contracts, commands, and synergy analysis in `docs/data/sme-ecommerce-domain-model-and-business-logic-spec.md`
+- Extended Master Data and Product Variants logical contracts in `docs/data/sme-extended-variants-and-entities-spec.md`
+
+These are **logical** (not physical DDL). Physical representation uses existing `current_cell_values` + `numeric_*` tables. Future physical tables must still follow the expand/contract pattern and be recorded only in the DDL canonicals above after governance updates.
+
+Non-canonical files must link here and not duplicate the logical contracts. `validate-pack.sh` will enforce drift detection for listed canonicals.
+
+
 ## Migration pattern
 
 Use expand/contract by default:

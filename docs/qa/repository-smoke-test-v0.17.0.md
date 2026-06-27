@@ -1,6 +1,6 @@
-# Repository Smoke Test v0.16.1
+# Repository Smoke Test v0.17.0
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Required bootstrap evidence contract
 
 ## Required commands
@@ -16,7 +16,7 @@ bash scripts/smoke-package-tests.sh
 The smoke checks prove that:
 
 ```text
-- active spec, snapshot, manifest, invariants, package metadata, and SLOs agree on v0.16.1;
+- active spec, snapshot, manifest, invariants, package metadata, and SLOs agree on v0.17.0;
 - implementation stubs live in apps/ and packages/;
 - no generated dist/, generated .d.ts, emitted source JS, or tsbuildinfo files are included;
 - TypeScript stubs compile under tsconfig.smoke.json;

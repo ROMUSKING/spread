@@ -1,6 +1,6 @@
 # Skeletons Relocated
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Compatibility index
 
 The golden-master TypeScript skeletons live in implementation paths:

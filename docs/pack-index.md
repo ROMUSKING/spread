@@ -1,6 +1,6 @@
-# Spreadsheet-Native ERP v0.16.1 Pack Index
+# Spreadsheet-Native ERP v0.17.0 Pack Index
 
-version: "0.16.1"  
+version: "0.17.0"  
 last-reviewed: "2026-06-26"  
 status: "Phase 0 runnable project bootstrap baseline with source stubs, smoke typecheck, and scoped agent instructions"
 
@@ -9,20 +9,20 @@ status: "Phase 0 runnable project bootstrap baseline with source stubs, smoke ty
 The first read for every human contributor and AI coding agent is:
 
 ```text
-docs/snapshot-v0.16.1.md
+docs/snapshot-v0.17.0.md
 ```
 
 The snapshot contains the authority map, repository tree, locked P0 order, agent non-goals, post-MVP exclusions, required smoke commands, and merge rule. Do not start from the main spec unless you already understand the snapshot.
 
 ## Bootstrap achieved
 
-P0-EXEC-001 is green for the runnable bootstrap baseline. Attached evidence lives in `docs/qa/bootstrap-completion-evidence-v0.16.1.md`. Begin real implementation with `AGENT-000 -> AGENT-001 -> AGENT-010 -> AGENT-011 -> AGENT-012`.
+P0-EXEC-001 is green for the runnable bootstrap baseline. Attached evidence lives in `docs/qa/bootstrap-completion-evidence-v0.17.0.md`. Begin real implementation with `AGENT-000 -> AGENT-001 -> AGENT-010 -> AGENT-011 -> AGENT-012`.
 
 ## 15-minute reading path
 
 | Reader | Read first | Then read |
 |---|---|---|
-| Any contributor | `docs/snapshot-v0.16.1.md` | `README.md` |
+| Any contributor | `docs/snapshot-v0.17.0.md` | `README.md` |
 | AI coding agent | `AGENTS.md` | `docs/implementation/phase0-agent-work-orders.md` |
 | Backend/API | `docs/dev/command-lifecycle.md` | `apps/api/src/commands/CommandHandlerBase.ts` |
 | SRE/platform | `docs/dev/outbox-polling-reader.md` | `apps/api/src/outbox/OutboxPoller.ts` |
@@ -36,7 +36,7 @@ P0-EXEC-001 is green for the runnable bootstrap baseline. Attached evidence live
 The active normative specification is:
 
 ```text
-spec/spreadsheet_native_erp_technical_spec_v0_16_1_research_driven_phase0_bootstrap_complete_execution.md
+spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md
 ```
 
 The active project-structure contract is:
@@ -51,9 +51,9 @@ The active source stub index is:
 docs/implementation/code-stub-index.md
 ```
 
-## v0.16.1 Runnable Bootstrap Summary
+## v0.17.0 Runnable Bootstrap Summary
 
-v0.16.1 adds a runnable smoke-test layer without widening MVP runtime scope:
+v0.17.0 adds a runnable smoke-test layer without widening MVP runtime scope:
 
 ```text
 - root TypeScript/pnpm workspace files;

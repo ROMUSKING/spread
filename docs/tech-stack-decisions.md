@@ -1,6 +1,6 @@
 # Tech Stack and Repository Shape Snapshot
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Provisional Phase 0 implementation baseline; update by ADR if changed  
 **Purpose:** Give AI coding agents a concrete repository shape and implementation substrate before code is generated.
 
@@ -73,7 +73,7 @@ Changing the stack requires:
 ```
 
 
-## v0.16.1 realized repository files
+## v0.17.0 realized repository files
 
 The planned layout now exists as source stubs. Agents must keep `pnpm-workspace.yaml`, `tsconfig.base.json`, `docs/implementation/project-directory-structure.md`, and scoped `AGENTS.md` files aligned when adding packages.
 
@@ -82,7 +82,7 @@ The planned layout now exists as source stubs. Agents must keep `pnpm-workspace.
 The active dependency-light smoke command is `bash scripts/smoke-typecheck.sh`. Real TypeScript typechecking becomes mandatory after dependencies are installed and locked by the first implementation PR.
 
 
-## v0.16.1 repository smoke
+## v0.17.0 repository smoke
 
 The repository must pass:
 
@@ -93,7 +93,7 @@ bash scripts/smoke-typecheck.sh
 This uses the TypeScript compiler available from `node_modules/.bin/tsc` or `PATH` and runs `tsc -p tsconfig.json --noEmit --pretty false`. It does not admit any post-MVP runtime into Phase 0.
 
 
-## v0.16.1 runnable bootstrap files
+## v0.17.0 runnable bootstrap files
 
 The planned layout now exists as source stubs and passes the bootstrap smoke typecheck:
 
@@ -114,6 +114,6 @@ packages/**/*.tsx
 Agents must keep `pnpm-workspace.yaml`, `tsconfig.base.json`, `tsconfig.smoke.json`, `docs/implementation/project-directory-structure.md`, and scoped `AGENTS.md` files aligned when adding packages.
 
 
-## v0.16.1 runnable repository files
+## v0.17.0 runnable repository files
 
 The bootstrap now includes `tsconfig.smoke.json` and `scripts/smoke-typecheck.sh`. Agents must keep the root smoke typecheck green while preserving the Phase 0 runtime boundary.

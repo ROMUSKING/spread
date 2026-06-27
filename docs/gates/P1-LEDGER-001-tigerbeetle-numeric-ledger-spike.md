@@ -1,9 +1,9 @@
 # P1-LEDGER-001: TigerBeetle Numeric Ledger Plane Spike
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Owner:** Domain Ledger Owner + Platform/SRE Owner  
 **Waiver:** Allowed for MVP runtime dependency only. MVP ledger-shaped contract is not waivable.  
-**Normative spec:** v0.16.1 post-MVP sections 20  
+**Normative spec:** v0.17.0 post-MVP sections 20  
 **SLO reference:** `docs/slo-baseline.yml#benchmarks.BENCH-LEDGER-001`
 
 ## Purpose

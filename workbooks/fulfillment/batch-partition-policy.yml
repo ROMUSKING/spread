@@ -1,0 +1,18 @@
+version: 0.17.0
+workbook: fulfillment
+partitionKeys:
+  - fulfillmentId
+foreignKeys:
+  - field: orderId
+    references: sales.id
+  - field: productId
+    references: products.id
+formulaReferences:
+  - field: qty_fulfilled
+    dependsOn:
+      - qty
+aggregateDependencies: []
+customDomainRules:
+  - name: positiveFulfillQty
+    expression: "qty_fulfilled >= 0"
+fallbackBehavior: reject

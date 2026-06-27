@@ -1,7 +1,7 @@
 ---
-version: "0.13.2"
-last-reviewed: "2026-06-26"
-status: "mvp ledger-shaped contract"
+version: "0.17.0"
+last-reviewed: "2026-06-27"
+status: "Approved contract baseline"
 ---
 
 # Numeric Ledger Contract for MVP and TigerBeetle Transition
@@ -306,6 +306,44 @@ This maps cleanly to TigerBeetle accounts and transfers later. Pending transfers
 This section is the canonical DDL source for post-MVP TigerBeetle field-assignment registries and PostgreSQL mirror tables. `docs/data/tigerbeetle-field-assignment-policy.md` defines meanings and selected strategy; this contract owns the executable schema.
 
 The MVP schema in `docs/data/numeric-ledger-contract.md` remains valid. The post-MVP mirror adds explicit TigerBeetle field-assignment registries and query-surface indexes.
+
+## Ecommerce + Owned Warehouse Ledger Patterns (basic SME)
+
+For basic online ecommerce + owned warehouse (see pilot-dataset-definition.md ecommerce subsection and the full model in `docs/data/sme-ecommerce-domain-model-and-business-logic-spec.md`):
+
+**Stock ledger (conserved, status accounts per stock modeling rule above):**
+- Ledger code example: tenant-defined for "stock_qty" (scale 0 for units).
+- Accounts (dimensions): tenant + product/sku + warehouse + stock_status (available | reserved | shipped | quarantine).
+- Movements (via PostgresMvpNumericLedgerAdapter in same tx as cells):
+  - `inventory.adjust` / receive: stock transfer available <- adjustment_source or in_transit (movement_kind: 'stock_receive' or 'stock_adjust')
+  - `fulfillment.allocate`: available -> reserved (movement_kind: 'stock_reserve')
+  - `order.fulfillShip`: reserved -> shipped ; inventory asset valuation credit + COGS (movement_kind: 'stock_ship', 'cogs_fulfill')
+  - Return: reverse with 'stock_return', 'cogs_reverse', 'ar_credit'
+
+**Money ledger patterns (basic):**
+- Accounts (dimensions): tenant + `receivables` (AR), `revenue`, `tax_liability`, `cash`, `inventory_valuation`, `cogs`.
+- Invoice Posting (movement_kinds: `ar_invoice` for pre-tax, `ar_invoice_tax` for tax offset):
+  - Debit customer `receivables` (total invoice amount)
+  - Credit `revenue` (pre-tax subtotal)
+  - Credit `tax_liability` (calculated tax amount)
+- Payment (movement_kind: `payment_receive`): debit `cash`, credit customer `receivables`.
+- Returns (movement_kind: `ar_credit`): reverse the invoice postings (credit receivables, debit revenue, debit tax liability).
+- Revenue recognition and COGS on fulfill/ship using standard_cost from Products cell at the time of movement (domainObjectRef carries product_id + order ref for recon).
+- Cash on payment.record.
+- Use `commandId`, `commandLineIndex`, `domainObjectRef: {orderId, lineId?, productId, warehouseId}` in every NumericTransferDraft.
+- Example transfer (in handler):
+  `ledger.createTransfer({ transferIdDec: deterministicFrom(commandId, line), debitAccountIdDec: arAccount, creditAccountIdDec: revenueAccount, amountDec: ..., ledgerCode: moneyLedger, movementKind: 'ar_invoice', ... })`
+  And for tax:
+  `ledger.createTransfer({ transferIdDec: deterministicFrom(commandId, line), debitAccountIdDec: arAccount, creditAccountIdDec: taxLiabilityAccount, amountDec: ..., ledgerCode: moneyLedger, movementKind: 'ar_invoice_tax', ... })`
+
+**COGS / valuation (basic scope):** Standard cost (Products.cost or standard_cost cell snapshot at fulfill time). Posted as paired transfers on fulfillShip and returns. No moving-average or complex costing in "basic".
+
+**3-way receive / returns:** Basic match in PO receive handler may post stock + AP effects or flag variance; only post on match-or-accepted. Returns reverse specific movement_kinds to keep reconcilable.
+
+All movements participate in AUD-001 (command_id on transfers) and are emitted via outbox (domain events). Direct balance updates outside the adapter are prohibited.
+
+Update numeric_accounts seeds in demo / fixtures when ecom ledgers are exercised.
+
 
 ### 10.1 Field assignment policy registry
 

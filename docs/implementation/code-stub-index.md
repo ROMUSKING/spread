@@ -1,6 +1,6 @@
 # Code Stub Index
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Active stub map for AI coding agents
 
 | Boundary | Stub path | Canonical docs |
@@ -11,14 +11,17 @@
 | Retrieval revalidation | `apps/api/src/retrieval/RetrievalRevalidator.middleware.ts` | `docs/dev/retrieval-revalidator.md` |
 | Minimal grid shell | `apps/web/src/components/GridShell.tsx` | `docs/ui/transposed-record-view-contract.md`, `docs/dev/client-optimistic-ui-and-conflicts.md` |
 | Runtime feature flags | `packages/config/src/env.ts` | `docs/post-mvp/post-mvp-planes-vnext.md` |
-| Smoke typecheck | `scripts/smoke-typecheck.sh`, `tsconfig.smoke.json` | `docs/qa/repository-smoke-test-v0.16.1.md` |
+| Smoke typecheck | `scripts/smoke-typecheck.sh`, `tsconfig.smoke.json` | `docs/qa/repository-smoke-test-v0.17.0.md` |
+| Batch partition policy | `workbooks/*/batch-partition-policy.yml` + `packages/domain/src/policies/BatchPartitionCompiler.ts:compilePartitions` | `docs/dev/batch-partition-policy.md`, `docs/data/pilot-dataset-definition.md` (ecom contracts) |
+| Domain workbook contracts (logical, Phase 0) | `docs/data/pilot-dataset-definition.md` (ecom subsection) + `docs/data/sme-ecommerce-domain-model-and-business-logic-spec.md` | `docs/data/schema-evolution-playbook.md` |
+| Domain command handlers (ecom basics) | `apps/api/src/commands/handlers/InventoryHandlers.ts`, `SalesHandlers.ts` (extend CommandHandlerBase) | sme-ecommerce-domain-model-and-business-logic-spec.md (payloads + logic) |
 
 These stubs are allowed starting points only. They must be made production-safe through the relevant work order and gate evidence.
 
 `docs/skeletons/` must not contain duplicate TypeScript source copies; it is only a documentation index.
 
 
-## v0.16.1 package smoke tests
+## v0.17.0 package smoke tests
 
 ```bash
 bash scripts/smoke-package-tests.sh

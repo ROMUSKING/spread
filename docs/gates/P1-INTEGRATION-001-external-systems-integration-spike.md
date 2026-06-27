@@ -1,6 +1,6 @@
 # P1-INTEGRATION-001: External Systems Integration Spike
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Owner:** Platform/API Owner + Security Owner + Domain Owner  
 **Waiver:** Not allowed for production connector rollout
 

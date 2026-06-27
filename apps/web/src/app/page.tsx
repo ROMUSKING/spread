@@ -9,6 +9,8 @@ import type { WorkspaceNode, WorkspaceEdge } from "../components/ExplorerPanel";
 import { useCommand } from "../lib/useCommand";
 import { useSseSubscription } from "../lib/useSseSubscription";
 import { ALLOWED_WORKBOOKS } from "../lib/workbookConstants";
+// KEEP IN SYNC: ALLOWED_WORKBOOKS extended for ecom workbooks per design spec.
+// Full seeds + graph in postgres.ts + server.ts (see PR2 in sme-ecommerce-domain-model-and-business-logic-spec.md)
 import { resolveEventWorkbookId, assertAllowedWorkbook } from "../lib/workbookUtils";
 import {
   isCommandFailure,

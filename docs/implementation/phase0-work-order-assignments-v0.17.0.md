@@ -1,6 +1,6 @@
-# Phase 0 Work-Order Assignments v0.16.1
+# Phase 0 Work-Order Assignments v0.17.0
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** First implementation assignment path after bootstrap completion
 
 ## Assignment order

@@ -1,0 +1,25 @@
+{
+  "fixture": "sales-positive",
+  "rows": [
+    {
+      "rowId": "SO-001-L1",
+      "orderId": "SO-001",
+      "productId": "p1",
+      "qty": 2,
+      "unit_price": 100
+    },
+    {
+      "rowId": "SO-001-L2",
+      "orderId": "SO-001",
+      "productId": "p2",
+      "qty": 1,
+      "unit_price": 250
+    }
+  ],
+  "expectedPartitions": [
+    [
+      "SO-001-L1",
+      "SO-001-L2"
+    ]
+  ]
+}

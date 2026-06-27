@@ -1,6 +1,6 @@
 # AI Coding Agent Implementation Roadmap
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Status:** Active execution roadmap  
 **Audience:** AI coding agents, reviewer agents, human owners, implementation leads

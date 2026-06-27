@@ -23,7 +23,7 @@ No silent deviations. Any departure from Phase 0 order, SLOs, privacy rules, ret
 | D-001 | 2026-06-26 | Keep polling-first outbox delivery in Phase 0. | Avoid commit-path risk from notification queue behavior. | Platform/SRE Owner | ADR-0015, P0-LIVE-001 |
 | D-002 | 2026-06-26 | Use tenant-hash command_log scale path rather than time-range partitioning as the first recommendation. | Preserves tenant-scoped command uniqueness without adding `created_at` to the idempotency key. | API/Client Owner | `docs/data/command-outbox-retention-partitioning.md` |
 
-## v0.16.1 validation waiver template
+## v0.17.0 validation waiver template
 
 ```yaml
 - id: DOC-WAIVER-YYYYMMDD-XXX

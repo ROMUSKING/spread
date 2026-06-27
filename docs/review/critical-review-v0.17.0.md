@@ -1,11 +1,11 @@
-# Critical Review Closure v0.16.1
+# Critical Review Closure v0.17.0
 
-**Status:** Addressed v0.16.1 runnable-bootstrap review.
+**Status:** Addressed v0.17.0 runnable-bootstrap review.
 
 ## Review items closed
 
 1. Smoke script robustness: added local/pnpm/global TypeScript resolution and explanatory comments.
-2. Stale references: promoted active baseline and validation to v0.16.1.
+2. Stale references: promoted active baseline and validation to v0.17.0.
 3. Trivial package tests: added dependency-free Node smoke tests for every app/package workspace.
 4. Snapshot visual and bootstrap note: retained repository tree and added Bootstrap achieved evidence.
 5. Next implementation path: added AGENT-000 through AGENT-012 assignments and vertical-slice release-note template.

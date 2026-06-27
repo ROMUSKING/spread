@@ -1,19 +1,19 @@
-# Spreadsheet-Native ERP Technical Specification v0.16.1
+# Spreadsheet-Native ERP Technical Specification v0.17.0
 
 **Date:** 2026-06-26  
 **Status:** Phase 0 runnable project bootstrap completion baseline  
 **Supersedes:** prior project-structure bootstrap baseline  
-**Version note:** This is **v0.16.1**, not v1.0. Version 1.0 remains reserved for a release-candidate baseline after Phase 0 evidence exists.  
+**Version note:** This is **v0.17.0**, not v1.0. Version 1.0 remains reserved for a release-candidate baseline after Phase 0 evidence exists.  
 **Audience:** Phase 0 engineering, security, QA, SRE, product, and AI coding agents.
 
 ## 1. Executive Summary
 
-v0.16.1 marks the runnable bootstrap as complete and adds the final delivery-polish layer: robust smoke tooling, runnable package smoke tests, bootstrap-completion evidence, and the next Phase 0 implementation assignment path. The product scope does not widen: Phase 0 still starts with command identity, durable outbox polling, security invariant CI, transactional-batch partition validation, hot-path rate limiting, and the safe-cell-edit vertical slice.
+v0.17.0 marks the runnable bootstrap as complete and adds the final delivery-polish layer: robust smoke tooling, runnable package smoke tests, bootstrap-completion evidence, and the next Phase 0 implementation assignment path. The product scope does not widen: Phase 0 still starts with command identity, durable outbox polling, security invariant CI, transactional-batch partition validation, hot-path rate limiting, and the safe-cell-edit vertical slice.
 
-The v0.16.1 changes are operational:
+The v0.17.0 changes are operational:
 
 ```text
-- active docs and repository metadata are promoted to v0.16.1;
+- active docs and repository metadata are promoted to v0.17.0;
 - the first-read snapshot includes a repository tree visual;
 - generated `dist/`, generated `.d.ts`, and `*.tsbuildinfo` files are excluded from the source pack; hand-written ambient declaration shims may remain under source;
 - `tsconfig.smoke.json` and `scripts/smoke-typecheck.sh` prove the TypeScript stubs are coherent;
@@ -33,7 +33,7 @@ Agents may not weaken validation or smoke tests to merge faster.
 
 ## 3. Runnable Bootstrap Additions
 
-| Area | Prior state | v0.16.1 refinement |
+| Area | Prior state | v0.17.0 refinement |
 |---|---|---|
 | Repository scaffold | apps/packages/stubs existed. | Add smoke typecheck script and validation wiring. |
 | Snapshot | first-read snapshot existed. | Add repository tree visual and required smoke commands. |
@@ -70,7 +70,7 @@ The smoke typecheck is intentionally lightweight. It proves that the TypeScript 
 
 | Area | Path |
 |---|---|
-| First-read snapshot | `docs/snapshot-v0.16.1.md` |
+| First-read snapshot | `docs/snapshot-v0.17.0.md` |
 | Agent instructions | `AGENTS.md` |
 | Project structure | `docs/implementation/project-directory-structure.md` |
 | Stub index | `docs/implementation/code-stub-index.md` |
@@ -80,7 +80,7 @@ The smoke typecheck is intentionally lightweight. It proves that the TypeScript 
 | Invariants | `invariants/security-invariants.yml` |
 | SLO baseline | `docs/slo-baseline.yml` |
 
-## 7. Final v0.16.1 Recommendation
+## 7. Final v0.17.0 Recommendation
 
 Proceed with Phase 0 implementation using the active work-order catalog. The bootstrap is now structurally validated and smoke-typechecked. The first real implementation sequence remains:
 
@@ -91,16 +91,16 @@ AGENT-000 -> AGENT-001 -> AGENT-010 -> AGENT-011 -> AGENT-012 -> AGENT-020 -> AG
 Do not admit TigerBeetle, pgvector, DuckDB, broker/CDC, full tiled UI, or external connector runtime into the ordinary edit path until the relevant post-MVP evidence gates pass.
 
 
-## 8. v0.16.1 Review Closure
+## 8. v0.17.0 Review Closure
 
-v0.16.1 addresses the final bootstrap review by adding a repository tree to the snapshot, requiring dependency-light repository smoke checks, adding TypeScript smoke typechecking, removing generated artifacts from the source archive, enforcing duplicate-skeleton cleanup, and sweeping stale active references.
+v0.17.0 addresses the final bootstrap review by adding a repository tree to the snapshot, requiring dependency-light repository smoke checks, adding TypeScript smoke typechecking, removing generated artifacts from the source archive, enforcing duplicate-skeleton cleanup, and sweeping stale active references.
 
 The release does not widen Phase 0 runtime scope. Post-MVP systems remain documented and feature-flagged off until their evidence gates pass.
 
 
-## 9. v0.16.1 Bootstrap Completion Closure
+## 9. v0.17.0 Bootstrap Completion Closure
 
-v0.16.1 addresses the runnable-bootstrap review without widening Phase 0 scope. The closure adds:
+v0.17.0 addresses the runnable-bootstrap review without widening Phase 0 scope. The closure adds:
 
 ```text
 - a Bootstrap achieved note in the first-read snapshot and pack index;
@@ -113,7 +113,7 @@ v0.16.1 addresses the runnable-bootstrap review without widening Phase 0 scope. 
 
 The release keeps TigerBeetle, pgvector, DuckDB, broker/CDC, full tiled UI, and external connector runtime outside the ordinary Phase 0 edit path.
 
-## 10. v0.16.1 Spreadsheet-Native UI/UX Enhancements
+## 10. v0.17.0 Spreadsheet-Native UI/UX Enhancements
 
 To establish a true spreadsheet-native UX baseline, the vertical slice UI has been upgraded with the following specifications:
 - **Empty Row (Unbounded Entry):** Trailing empty row at the bottom of the grid which immediately updates local state and propagates mutations when the user starts typing.

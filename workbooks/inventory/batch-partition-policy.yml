@@ -1,4 +1,4 @@
-version: 0.16.1
+version: 0.17.0
 workbook: inventory
 partitionKeys:
   - productId
@@ -9,12 +9,18 @@ foreignKeys:
   - field: warehouseId
     references: warehouses.id
 formulaReferences:
+  - field: quantity_available
+    dependsOn:
+      - quantity_on_hand
+      - quantity_reserved
   - field: totalValue
     dependsOn:
-      - quantity
-      - unit_price
+      - quantity_on_hand
+      - unit_cost
 aggregateDependencies: []
 customDomainRules:
   - name: positiveStock
-    expression: "quantity >= 0"
+    expression: "quantity_on_hand >= 0"
+  - name: nonNegativeReserved
+    expression: "quantity_reserved >= 0"
 fallbackBehavior: reject

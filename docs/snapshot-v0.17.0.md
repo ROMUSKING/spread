@@ -1,6 +1,6 @@
-# START HERE — Spreadsheet-Native ERP v0.16.1 Snapshot
+# START HERE — Spreadsheet-Native ERP v0.17.0 Snapshot
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Status:** First-read architecture, repository, and smoke-test snapshot
 
@@ -10,9 +10,9 @@
 ```text
 P0-EXEC-001 is green for the runnable bootstrap baseline.
 Evidence attached:
-  - repo://docs/qa/bootstrap-completion-evidence-v0.16.1.md
-  - repo://docs/qa/repository-smoke-test-v0.16.1.md
-  - repo://docs/qa/agent-simulation-run-v0.16.1.md
+  - repo://docs/qa/bootstrap-completion-evidence-v0.17.0.md
+  - repo://docs/qa/repository-smoke-test-v0.17.0.md
+  - repo://docs/qa/agent-simulation-run-v0.17.0.md
 
 Next implementation sequence:
   AGENT-000 -> AGENT-001 -> AGENT-010 -> AGENT-011 -> AGENT-012

@@ -10,7 +10,7 @@ test("@erp/api package metadata is coherent", () => {
   assert.equal(pkg.name, "@erp/api");
   assert.equal(pkg.private, true);
   assert.equal(pkg.type, "module");
-  assert.equal(pkg.version, "0.16.1");
+  assert.equal(pkg.version, "0.17.0");
 });
 
 test("@erp/api required bootstrap source stub exists", () => {

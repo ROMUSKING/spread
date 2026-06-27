@@ -1,6 +1,6 @@
 # Agent PR Handoff Examples
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Active examples for reviewers and AI coding agents  
 **Purpose:** Show what an acceptable agent PR handoff looks like and what must be rejected.
 
@@ -16,7 +16,7 @@
 Adds command_log migration and command-id reuse conflict test. Does not expose editable cells yet.
 
 ## Canonical docs read
-- docs/snapshot-v0.16.1.md
+- docs/snapshot-v0.17.0.md
 - docs/dev/command-lifecycle.md
 - docs/data/command-outbox-retention-partitioning.md
 - apps/api/src/commands/CommandHandlerBase.ts

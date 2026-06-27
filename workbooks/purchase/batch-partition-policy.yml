@@ -1,0 +1,21 @@
+version: 0.17.0
+workbook: purchase
+partitionKeys:
+  - poId
+foreignKeys:
+  - field: productId
+    references: products.id
+  - field: supplierId
+    references: suppliers.id
+formulaReferences:
+  - field: line_total
+    dependsOn:
+      - qty_ordered
+      - unit_price
+aggregateDependencies: []
+customDomainRules:
+  - name: positiveQty
+    expression: "qty_ordered >= 0"
+  - name: nonNegativePrice
+    expression: "unit_price >= 0"
+fallbackBehavior: reject

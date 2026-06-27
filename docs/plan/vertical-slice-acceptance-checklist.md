@@ -33,7 +33,7 @@ Use `docs/data/pilot-dataset-definition.md` and dataset key `pilot-v1-small` unl
 
 All required checks must pass or be recorded in `docs/process/decision-waiver-log.md` with explicit owner sign-off. P0-CMD-001 and P0-LIVE-001 may not be waived for the vertical slice.
 
-## v0.16.1 accessibility and mobile minimum
+## v0.17.0 accessibility and mobile minimum
 
 The vertical slice does not require the full tiled workspace, but the minimal spreadsheet edit path must not block later accessible/mobile UI work.
 

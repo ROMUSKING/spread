@@ -35,7 +35,7 @@ ci://tests/ui/p1-ux-starts-only-after-vertical-slice-green
 
 Scope note: Phase 0 must not implement broad tiling workspace behavior before the vertical slice is green.
 
-## v0.16.1 Phase 0 guard
+## v0.17.0 Phase 0 guard
 
 `P1-UX-001` remains post-vertical-slice. Before this gate is green, no tile or transposed view may contain a mutation path that is not routed through `command_api`.
 

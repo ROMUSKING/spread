@@ -1,6 +1,6 @@
-version: 0.16.1
+version: 0.17.0
 last_reviewed: '2026-06-26'
-status: v0.16.1 runnable project bootstrap baseline
+status: v0.17.0 runnable project bootstrap baseline
 datasets:
   pilot: pilot-v1-small
   batch_fixtures: tests/fixtures/batch
@@ -456,7 +456,7 @@ benchmarks:
     rejection_accuracy_percent: 100
     simulations_total: 7
     false_negatives_allowed: 0
-    evidence_output_required: repo://docs/qa/agent-simulation-run-v0.16.1.md
+    evidence_output_required: repo://docs/qa/agent-simulation-run-v0.17.0.md
     target: agent simulation rejection loop
     snapshot_authority_map_first_required: true
     agent_pr_handoff_example_count_min: 2
@@ -469,7 +469,7 @@ benchmarks:
     pack_index_start_here_required: true
   BENCH-REPO-001:
     target: repo-structure-validation-green
-    dataset: project-skeleton-v0.16.1
+    dataset: project-skeleton-v0.17.0
   BENCH-REPO-002:
     smoke_typecheck_required: true
     tsconfig: tsconfig.smoke.json

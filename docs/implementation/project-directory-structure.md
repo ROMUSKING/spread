@@ -1,6 +1,6 @@
 # Project Directory Structure
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Active Phase 0 runnable repository bootstrap contract
 
 ## Purpose
@@ -67,7 +67,7 @@ Do not create a new top-level app or package without updating this document, `pn
 Generated `dist/`, generated declaration outputs, and `*.tsbuildinfo` files are not part of the source bootstrap archive. Hand-written ambient declaration shims may remain under `src/` when required for smoke typecheck. Generated outputs are ignored by `.gitignore` and rejected by `scripts/validate-pack.sh`.
 
 
-## v0.16.1 package smoke tests
+## v0.17.0 package smoke tests
 
 ```bash
 bash scripts/smoke-package-tests.sh

@@ -1,11 +1,11 @@
 # Gate: P0-LIVE-001 - Polling-First Outbox Live Updates
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Owner:** Platform/SRE Owner  
 **Priority:** P0  
 **Waiver allowed:** No  
-**Normative spec:** v0.16.1 sections 5 and 12.2  
+**Normative spec:** v0.17.0 sections 5 and 12.2  
 **SLO reference:** `docs/slo-baseline.yml`
 
 ## Requirement
@@ -46,6 +46,6 @@ Live updates must be delivered from durable `outbox_events` without depending on
 Keep `NOTIFY` disabled and use polling if benchmark evidence is missing or unsafe.
 
 
-## v0.16.1 active baseline note
+## v0.17.0 active baseline note
 
-This P0 gate is active under the v0.16.1 AI coding-agent implementation-roadmap baseline.
+This P0 gate is active under the v0.17.0 AI coding-agent implementation-roadmap baseline.

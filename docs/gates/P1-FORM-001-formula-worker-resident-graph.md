@@ -1,11 +1,11 @@
 # Gate: P1-FORM-001 - Formula Worker Resident Graph
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Owner:** Formula Owner  
 **Priority:** P1  
 **Waiver allowed:** Yes for non-decision-critical formulas only  
-**Normative spec:** v0.16.1 sections 10 and 12.6  
+**Normative spec:** v0.17.0 sections 10 and 12.6  
 **SLO reference:** `docs/slo-baseline.yml`
 
 ## Requirement

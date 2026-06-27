@@ -1,6 +1,12 @@
-version: 0.16.1
+version: 0.17.0
 last_reviewed: '2026-06-26'
 sloReference: repo://docs/slo-baseline.yml
+# PR1 from sme-ecommerce-domain-model-and-business-logic-spec.md:
+# - New logical domain contracts in pilot-dataset-definition.md (ecom workbooks)
+# - Batch policies under workbooks/{sales,purchase,fulfillment}/ + enhanced inventory
+# - Evidence for batch compile on ecom policies will be added in evidence.test.mjs
+# Future: add ci://tests/batch/ecom-policy-validation etc. under relevant gates (P0-BATCH-001)
+
 gates:
 - id: P0-EXEC-001
   gateCard: repo://docs/gates/P0-EXEC-001-ai-agent-implementation-readiness.md
@@ -570,8 +576,8 @@ requiredDocs:
 - repo://tests/fixtures/integration/pilot-v1-small-import-negative.json
 - repo://tests/fixtures/integration/pilot-v1-revoked-credential-schema-mismatch.json
 - repo://AGENTS.md
-- repo://spec/spreadsheet_native_erp_technical_spec_v0_16_1_research_driven_phase0_bootstrap_complete_execution.md
-- repo://docs/review/critical-review-v0.16.1.md
+- repo://spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md
+- repo://docs/review/critical-review-v0.17.0.md
 - repo://docs/implementation/ai-coding-agent-roadmap.md
 - repo://docs/implementation/phase0-agent-work-orders.md
 - repo://docs/implementation/agent-operating-model.md
@@ -579,7 +585,7 @@ requiredDocs:
 - repo://docs/qa/agent-implementation-validation-plan.md
 - repo://docs/gates/P0-EXEC-001-ai-agent-implementation-readiness.md
 - repo://docs/diagrams/ai-agent-implementation-roadmap.md
-- repo://docs/snapshot-v0.16.1.md
+- repo://docs/snapshot-v0.17.0.md
 - repo://docs/post-mvp/post-mvp-planes-vnext.md
 - repo://docs/tech-stack-decisions.md
 - repo://docs/skeletons/README.md
@@ -591,7 +597,7 @@ requiredDocs:
 - repo://docs/qa/agent-simulation-test.md
 - repo://docs/pack-health-dashboard.md
 - repo://docs/implementation/pr-handoff-examples.md
-- repo://docs/qa/agent-simulation-run-v0.16.1.md
+- repo://docs/qa/agent-simulation-run-v0.17.0.md
 - repo://docs/implementation/project-directory-structure.md
 - repo://docs/implementation/code-stub-index.md
 - repo://.gitignore
@@ -599,11 +605,11 @@ requiredDocs:
 - repo://pnpm-workspace.yaml
 - repo://.github/copilot-instructions.md
 - repo://.cursor/rules/phase0-boundaries.mdc
-- repo://docs/changelog/CHANGELOG-v0.16.1.md
-- repo://docs/qa/repository-smoke-test-v0.16.1.md
+- repo://docs/changelog/CHANGELOG-v0.17.0.md
+- repo://docs/qa/repository-smoke-test-v0.17.0.md
 - repo://scripts/smoke-typecheck.sh
 - repo://tsconfig.smoke.json
-- repo://docs/qa/bootstrap-completion-evidence-v0.16.1.md
-- repo://docs/implementation/phase0-work-order-assignments-v0.16.1.md
+- repo://docs/qa/bootstrap-completion-evidence-v0.17.0.md
+- repo://docs/implementation/phase0-work-order-assignments-v0.17.0.md
 - repo://docs/release/vertical-slice-release-note-template.md
 - repo://scripts/smoke-package-tests.sh

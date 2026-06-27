@@ -1,6 +1,6 @@
 # Agent PR Validation Playbook
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Status:** Active PR checklist for AI coding agents
 
@@ -112,7 +112,7 @@ Required reviewer response: reject. This violates OUTBOX-001 and P0-LIVE-001. Ag
 See `docs/implementation/pr-handoff-examples.md` for full good and rejected diff-style examples.
 
 
-## v0.16.1 package smoke tests
+## v0.17.0 package smoke tests
 
 ```bash
 bash scripts/smoke-package-tests.sh

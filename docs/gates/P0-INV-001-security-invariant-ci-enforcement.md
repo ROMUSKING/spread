@@ -1,11 +1,11 @@
 # Gate: P0-INV-001 - Security Invariant CI Enforcement
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Owner:** Security Owner  
 **Priority:** P0  
 **Waiver allowed:** Emergency waiver only by CTO and Security Owner  
-**Normative spec:** v0.16.1 sections 9 and 12.3  
+**Normative spec:** v0.17.0 sections 9 and 12.3  
 **SLO reference:** `docs/slo-baseline.yml`
 
 ## Requirement
@@ -32,6 +32,6 @@ Security invariants must be executable checks enforced by CI, not prose-only req
 Block merge and release if release-blocking invariants fail or evidence references are missing.
 
 
-## v0.16.1 active baseline note
+## v0.17.0 active baseline note
 
-This P0 gate is active under the v0.16.1 AI coding-agent implementation-roadmap baseline.
+This P0 gate is active under the v0.17.0 AI coding-agent implementation-roadmap baseline.

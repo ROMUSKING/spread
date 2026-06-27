@@ -24,6 +24,11 @@ import {
   CommandHandlerBase,
   type CommandExecutionContext,
 } from './commands/CommandHandlerBase';
+import {
+  InventoryAdjustHandler,
+  ProductCreateHandler,
+} from './commands/handlers/InventoryHandlers';
+import { SalesOrderCreateHandler } from './commands/handlers/SalesHandlers';
 import type { CommandEnvelope } from '@erp/domain/commands/types';
 import { RateLimiter } from './http/RateLimiter';
 
@@ -35,9 +40,21 @@ const PORT = Number(process.env.API_PORT || 3001);
 const DEFAULT_TENANT = '00000000-0000-0000-0000-000000000001'; // matches seed
 const DEFAULT_WORKBOOK = '00000000-0000-0000-0000-000000000002';
 const ALLOWED_WORKBOOKS = [
-  '00000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000003',
-  '00000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000002', // Sales Orders (pilot)
+  '00000000-0000-0000-0000-000000000003', // Inventory Stock (pilot)
+  '00000000-0000-0000-0000-000000000004', // Purchase Ledger (pilot)
+  // Ecom domain workbooks (see design spec + workbookConstants.ts)
+  // KEEP IN SYNC with apps/web/src/lib/workbookConstants.ts + page.tsx + workbookUtils.ts + these guards (design Issue 2)
+  '00000000-0000-0000-0000-000000000010', // Products
+  '00000000-0000-0000-0000-000000000011', // Customers
+  '00000000-0000-0000-0000-000000000012', // Suppliers
+  '00000000-0000-0000-0000-000000000013', // Warehouses
+  '00000000-0000-0000-0000-000000000014', // InventoryBalances
+  '00000000-0000-0000-0000-000000000015', // SalesOrders
+  '00000000-0000-0000-0000-000000000016', // PurchaseOrders
+  '00000000-0000-0000-0000-000000000017', // Fulfillments
+  '00000000-0000-0000-0000-000000000018', // SalesOrderHeaders
+  '00000000-0000-0000-0000-000000000019', // PurchaseOrderHeaders
 ];
 
 // In-memory tracer/metrics for Phase 0 (real OTEL later)
@@ -179,6 +196,13 @@ export async function startApi(): Promise<void> {
   handlers.set('row.delete', new DemoRowDeleteHandler());
   handlers.set('graph.node.add', new DemoGraphNodeAddHandler());
   handlers.set('graph.edge.add', new DemoGraphEdgeAddHandler());
+
+  // Ecommerce domain command handlers (basic SME ops per design spec)
+  // These coexist with cell primitives; use id-based columns (product_id etc.)
+  // All go through CommandProcessor tx + ledger + outbox.
+  handlers.set('inventory.adjust', new InventoryAdjustHandler());
+  handlers.set('product.create', new ProductCreateHandler());
+  handlers.set('salesOrder.create', new SalesOrderCreateHandler());
 
   initCommandRoute(db, handlers);
   const connectionManager = new SseConnectionManager();

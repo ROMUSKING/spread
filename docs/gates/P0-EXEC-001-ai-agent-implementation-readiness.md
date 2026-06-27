@@ -1,6 +1,6 @@
 # P0-EXEC-001: AI Agent Implementation Readiness
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Execution governance gate; does not alter product P0 order  
 **Owner:** Engineering Lead + QA Owner  
 **Waiver:** Not allowed for agent-authored PRs
@@ -21,7 +21,7 @@ P0-CMD-001 -> P0-LIVE-001 -> P0-INV-001 -> P0-BATCH-001 -> P0-RATE-001
 
 ## Bootstrap completion status
 
-P0-EXEC-001 is green for the runnable bootstrap baseline once `docs/qa/bootstrap-completion-evidence-v0.16.1.md` links validation, smoke typecheck, package smoke tests, ZIP integrity, and agent simulation evidence.
+P0-EXEC-001 is green for the runnable bootstrap baseline once `docs/qa/bootstrap-completion-evidence-v0.17.0.md` links validation, smoke typecheck, package smoke tests, ZIP integrity, and agent simulation evidence.
 
 ## Requirements
 
@@ -35,13 +35,13 @@ P0-EXEC-001 is green for the runnable bootstrap baseline once `docs/qa/bootstrap
 8. Agent work orders must not admit TigerBeetle, pgvector, DuckDB, broker/CDC, connector runtime, full UI tiling, or external APIs into the Phase 0 edit path.
 9. Every agent PR must run `scripts/validate-pack.sh` before handoff.
 10. Reviewer checklist must reject command bypass, outbox bypass, secret leakage, direct external writes, direct TigerBeetle writes, and unrevalidated derived-plane output.
-11. `SNAP-001` requires `docs/snapshot-v0.16.1.md` to exist, is referenced by README and pack-index, and is the first-read artifact for agents and humans. `SNAP-002` requires README and pack-index to begin with a START HERE snapshot entrypoint.
+11. `SNAP-001` requires `docs/snapshot-v0.17.0.md` to exist, is referenced by README and pack-index, and is the first-read artifact for agents and humans. `SNAP-002` requires README and pack-index to begin with a START HERE snapshot entrypoint.
 12. Code work orders that touch covered domains must start from `docs/skeletons/` reference skeletons.
 13. Validation waiver mode is documented and limited to non-release-blocking warnings with a decision-waiver-log entry.
 14. `docs/qa/agent-simulation-test.md` defines bad-agent-PR rejection tests.
 15. UI work before P1-UX-001 must not introduce tile/transposed mutation paths outside `command_api`.
 16. `docs/implementation/pr-handoff-examples.md` must contain concrete good and rejected PR diff examples.
-17. `docs/qa/agent-simulation-run-v0.16.1.md` must attach simulation output for bad-PR rejection behavior.
+17. `docs/qa/agent-simulation-run-v0.17.0.md` must attach simulation output for bad-PR rejection behavior.
 18. `scripts/smoke-package-tests.sh` must pass dependency-free package smoke tests for every workspace.
 19. `docs/release/vertical-slice-release-note-template.md` must exist before first feature PR handoff.
 

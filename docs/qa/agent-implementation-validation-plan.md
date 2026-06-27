@@ -1,6 +1,6 @@
 # Agent Implementation Validation Plan
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Status:** Active QA plan for agent-executed work
 
@@ -59,7 +59,7 @@ BENCH-EXEC-001:
 - generated docs/reference drift report.
 ```
 
-## v0.16.1 additional execution evidence
+## v0.17.0 additional execution evidence
 
 The following evidence extends `BENCH-EXEC-001`:
 

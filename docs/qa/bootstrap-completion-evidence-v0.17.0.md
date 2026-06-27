@@ -1,6 +1,6 @@
-# Bootstrap Completion Evidence v0.16.1
+# Bootstrap Completion Evidence v0.17.0
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** P0-EXEC-001 bootstrap completion evidence packet
 
 ## Evidence bundle

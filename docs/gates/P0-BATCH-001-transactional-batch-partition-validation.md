@@ -1,11 +1,11 @@
 # Gate: P0-BATCH-001 - Transactional Batch Partition Validation
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Owner:** Backend/Domain Model Owner  
 **Priority:** P0  
 **Waiver allowed:** No for transactional_batch  
-**Normative spec:** v0.16.1 sections 7 and 12.4  
+**Normative spec:** v0.17.0 sections 7 and 12.4  
 **SLO reference:** `docs/slo-baseline.yml`
 
 ## Requirement
@@ -36,6 +36,6 @@
 Disable `transactional_batch` for affected workbook and fall back to `atomic` or rejection.
 
 
-## v0.16.1 active baseline note
+## v0.17.0 active baseline note
 
-This P0 gate is active under the v0.16.1 AI coding-agent implementation-roadmap baseline.
+This P0 gate is active under the v0.17.0 AI coding-agent implementation-roadmap baseline.

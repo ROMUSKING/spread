@@ -1,6 +1,6 @@
 # AI Agent Implementation Roadmap Diagrams
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Status:** Active reference diagrams
 

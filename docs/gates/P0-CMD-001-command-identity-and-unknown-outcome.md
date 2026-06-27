@@ -1,11 +1,11 @@
 # Gate: P0-CMD-001 - Command Identity and Unknown-Outcome Recovery
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Last-reviewed:** 2026-06-26  
 **Owner:** API/Client Owner  
 **Priority:** P0  
 **Waiver allowed:** No  
-**Normative spec:** v0.16.1 sections 6 and 12.1  
+**Normative spec:** v0.17.0 sections 6 and 12.1  
 **SLO reference:** `docs/slo-baseline.yml`
 
 ## Requirement
@@ -46,6 +46,6 @@ Block Phase 0 release if duplicate mutation is possible after response loss or i
 - `ci://benchmarks/BENCH-CMD-TX-001`
 
 
-## v0.16.1 active baseline note
+## v0.17.0 active baseline note
 
-This P0 gate is active under the v0.16.1 AI coding-agent implementation-roadmap baseline.
+This P0 gate is active under the v0.17.0 AI coding-agent implementation-roadmap baseline.

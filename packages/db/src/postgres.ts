@@ -59,6 +59,12 @@ class InMemoryQueryable implements Queryable {
       { id: '00000000-0000-0000-0000-000000000002', label: 'Sales Orders', kind: 'workbook', tags: ['sales', 'orders'] },
       { id: '00000000-0000-0000-0000-000000000003', label: 'Inventory Stock', kind: 'workbook', tags: ['warehouse', 'stock'] },
       { id: '00000000-0000-0000-0000-000000000004', label: 'Purchase Ledger', kind: 'workbook', tags: ['finance', 'ledger'] },
+      // New ecom + warehouse workbooks (id-based refs; see design spec)
+      { id: '00000000-0000-0000-0000-000000000010', label: 'Products', kind: 'workbook', tags: ['catalog'] },
+      { id: '00000000-0000-0000-0000-000000000014', label: 'Inventory Balances', kind: 'workbook', tags: ['warehouse', 'stock'] },
+      { id: '00000000-0000-0000-0000-000000000015', label: 'Sales Orders (domain)', kind: 'workbook', tags: ['sales', 'orders'] },
+      { id: '00000000-0000-0000-0000-000000000018', label: 'Sales Order Headers', kind: 'workbook', tags: ['sales', 'orders', 'headers'] },
+      { id: '00000000-0000-0000-0000-000000000019', label: 'Purchase Order Headers', kind: 'workbook', tags: ['finance', 'ledger', 'headers'] },
     ];
 
     // Seed Workspace Edges
@@ -67,9 +73,14 @@ class InMemoryQueryable implements Queryable {
       { id: '00000000-0000-0000-0000-000000000202', source: '00000000-0000-0000-0000-000000000102', target: '00000000-0000-0000-0000-000000000003', label: 'contains' },
       { id: '00000000-0000-0000-0000-000000000203', source: '00000000-0000-0000-0000-000000000103', target: '00000000-0000-0000-0000-000000000004', label: 'contains' },
       { id: '00000000-0000-0000-0000-000000000204', source: '00000000-0000-0000-0000-000000000103', target: '00000000-0000-0000-0000-000000000002', label: 'contains' },
-      { id: '00000000-0000-0000-0000-000000000205', source: '00000000-0000-0000-0000-000000000002', target: '00000000-0000-0000-0000-000000000003', label: 'deducts stock via item_name' },
+      { id: '00000000-0000-0000-0000-000000000205', source: '00000000-0000-0000-0000-000000000002', target: '00000000-0000-0000-0000-000000000003', label: 'deducts stock via item_name (legacy; migrate to id)' },
       { id: '00000000-0000-0000-0000-000000000206', source: '00000000-0000-0000-0000-000000000004', target: '00000000-0000-0000-0000-000000000002', label: 'funds order fulfillment' },
       { id: '00000000-0000-0000-0000-000000000207', source: '00000000-0000-0000-0000-000000000003', target: '00000000-0000-0000-0000-000000000004', label: 'triggers reorder purchases' },
+      // New id-based relations for ecom domain (PR2)
+      { id: '00000000-0000-0000-0000-000000000208', source: '00000000-0000-0000-0000-000000000015', target: '00000000-0000-0000-0000-000000000014', label: 'allocates from InventoryBalances via product_id' },
+      { id: '00000000-0000-0000-0000-000000000209', source: '00000000-0000-0000-0000-000000000010', target: '00000000-0000-0000-0000-000000000014', label: 'defines stock for product' },
+      { id: '00000000-0000-0000-0000-000000000210', source: '00000000-0000-0000-0000-000000000018', target: '00000000-0000-0000-0000-000000000015', label: 'headers link to lines' },
+      { id: '00000000-0000-0000-0000-000000000211', source: '00000000-0000-0000-0000-000000000019', target: '00000000-0000-0000-0000-000000000016', label: 'purchase headers link to lines' },
     ];
     
     // Seed Workbook 1: Sales Orders (default)
@@ -135,6 +146,54 @@ class InMemoryQueryable implements Queryable {
           value_text: val,
           updated_at: new Date()
         });
+      }
+    }
+
+    // Seed new ecom workbooks (id-based; minimal for demo / allowlist)
+    // Products (000...010)
+    const wbProducts = '00000000-0000-0000-0000-000000000010';
+    const prodRows = [
+      { rowId: "p1", values: { product_id: "p1", sku: "DESK-PREM", name: "Premium Desk", unit_price: "250.00", cost: "120.00", tax_rate: "0.1" } },
+      { rowId: "p2", values: { product_id: "p2", sku: "CHAIR-ERG", name: "Ergonomic Chair", unit_price: "180.00", cost: "90.00", tax_rate: "0.1" } },
+    ];
+    for (const r of prodRows) {
+      for (const [col, val] of Object.entries(r.values)) {
+        this.currentCellValues.push({ tenant_id: defaultTenant, workbook_id: wbProducts, row_id: r.rowId, column_id: col, value_text: String(val), updated_at: new Date() });
+      }
+    }
+
+    // InventoryBalances (000...014) using product_id + warehouse_id
+    const wbInv = '00000000-0000-0000-0000-000000000014';
+    const invRows = [
+      { rowId: "p1:w1", values: { product_id: "p1", warehouse_id: "w1", quantity_on_hand: "15", quantity_reserved: "2", bin_location: "A-01" } },
+      { rowId: "p2:w1", values: { product_id: "p2", warehouse_id: "w1", quantity_on_hand: "42", quantity_reserved: "0", bin_location: "B-02" } },
+    ];
+    for (const r of invRows) {
+      for (const [col, val] of Object.entries(r.values)) {
+        this.currentCellValues.push({ tenant_id: defaultTenant, workbook_id: wbInv, row_id: r.rowId, column_id: col, value_text: String(val), updated_at: new Date() });
+      }
+    }
+
+    // Seed Sales Order Headers (000...018)
+    const wbSOHeaders = '00000000-0000-0000-0000-000000000018';
+    const soHeadRows = [
+      { rowId: "SO-001", values: { order_id: "SO-001", customer_id: "c1", status: "CONFIRMED" } },
+      { rowId: "SO-002", values: { order_id: "SO-002", customer_id: "c2", status: "DRAFT" } },
+    ];
+    for (const r of soHeadRows) {
+      for (const [col, val] of Object.entries(r.values)) {
+        this.currentCellValues.push({ tenant_id: defaultTenant, workbook_id: wbSOHeaders, row_id: r.rowId, column_id: col, value_text: String(val), updated_at: new Date() });
+      }
+    }
+
+    // Seed Purchase Order Headers (000...019)
+    const wbPOHeaders = '00000000-0000-0000-0000-000000000019';
+    const poHeadRows = [
+      { rowId: "PO-001", values: { po_id: "PO-001", supplier_id: "s1", status: "ORDERED" } },
+    ];
+    for (const r of poHeadRows) {
+      for (const [col, val] of Object.entries(r.values)) {
+        this.currentCellValues.push({ tenant_id: defaultTenant, workbook_id: wbPOHeaders, row_id: r.rowId, column_id: col, value_text: String(val), updated_at: new Date() });
       }
     }
   }

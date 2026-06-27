@@ -1,6 +1,6 @@
 # Agent Simulation Test Plan
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Required process test for AI coding-agent execution governance
 
 ## Purpose
@@ -36,6 +36,6 @@ ci://tests/process/agent-simulation-waiver-requires-log-entry
 `P0-EXEC-001` is not green for broad agent implementation until the simulation suite rejects the unsafe PRs above with clear stop-condition messages.
 
 
-## Attached v0.16.1 run evidence
+## Attached v0.17.0 run evidence
 
-The current attached run artifact is `docs/qa/agent-simulation-run-v0.16.1.md`. It records expected stop-condition messages and simulation timing.
+The current attached run artifact is `docs/qa/agent-simulation-run-v0.17.0.md`. It records expected stop-condition messages and simulation timing.

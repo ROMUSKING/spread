@@ -1,7 +1,7 @@
 {
   "name": "spreadsheet-native-erp",
   "private": true,
-  "version": "0.16.1",
+  "version": "0.17.0",
   "packageManager": "pnpm@9.15.4",
   "engines": {
     "node": ">=22.0.0",

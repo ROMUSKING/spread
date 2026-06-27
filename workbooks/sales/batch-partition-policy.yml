@@ -1,0 +1,25 @@
+version: 0.17.0
+workbook: sales
+partitionKeys:
+  - orderId
+foreignKeys:
+  - field: productId
+    references: products.id
+  - field: customerId
+    references: customers.id
+formulaReferences:
+  - field: line_total
+    dependsOn:
+      - qty
+      - unit_price
+  - field: tax_amount
+    dependsOn:
+      - line_total
+      - tax_rate_snapshot
+aggregateDependencies: []
+customDomainRules:
+  - name: positiveQty
+    expression: "qty >= 0"
+  - name: nonNegativePrice
+    expression: "unit_price >= 0"
+fallbackBehavior: reject

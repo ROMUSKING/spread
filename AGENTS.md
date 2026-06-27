@@ -1,12 +1,12 @@
-# AI Coding Agent Instructions — Spreadsheet-Native ERP v0.16.1
+# AI Coding Agent Instructions — Spreadsheet-Native ERP v0.17.0
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Active repository-smoke implementation baseline  
-**First read:** `docs/snapshot-v0.16.1.md`
+**First read:** `docs/snapshot-v0.17.0.md`
 
 ## Mandatory first step
 
-Before implementation, confirm you have read `docs/snapshot-v0.16.1.md`. The “What agents may NOT do today” checklist is a stop-condition list, not guidance.
+Before implementation, confirm you have read `docs/snapshot-v0.17.0.md`. The “What agents may NOT do today” checklist is a stop-condition list, not guidance.
 
 ## Non-negotiable boundaries
 
@@ -31,12 +31,12 @@ bash scripts/smoke-package-tests.sh
 
 | Purpose | Path |
 |---|---|
-| Architecture snapshot | `docs/snapshot-v0.16.1.md` |
+| Architecture snapshot | `docs/snapshot-v0.17.0.md` |
 | Phase 0 work orders | `docs/implementation/phase0-agent-work-orders.md` |
 | Project structure | `docs/implementation/project-directory-structure.md` |
 | Stub index | `docs/implementation/code-stub-index.md` |
 | Command handler skeleton | `apps/api/src/commands/CommandHandlerBase.ts` |
-| Active spec | `spec/spreadsheet_native_erp_technical_spec_v0_16_1_research_driven_phase0_bootstrap_complete_execution.md` |
+| Active spec | `spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md` |
 | Validation waiver policy | `docs/process/validation-waiver-policy.md` |
 
 ## Validation waiver mode

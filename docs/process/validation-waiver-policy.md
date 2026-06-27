@@ -1,6 +1,6 @@
 # Validation Waiver Policy
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Process control for non-release-blocking validation warnings
 
 ## Decision

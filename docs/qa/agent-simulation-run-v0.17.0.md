@@ -1,6 +1,6 @@
-# Agent Simulation Run v0.16.1
+# Agent Simulation Run v0.17.0
 
-**Version:** 0.16.1  
+**Version:** 0.17.0  
 **Status:** Attached evidence artifact for P0-EXEC-001  
 **Run date:** 2026-06-26  
 **Dataset:** synthetic bad-PR fixtures from `docs/qa/agent-simulation-test.md`
@@ -50,7 +50,7 @@ Pack validation completed with waiver.
 `P0-EXEC-001` may use this as attached evidence that bad agent behavior is rejected before broad implementation begins. This does not replace real CI; it is a governance smoke test for validator/reviewer behavior.
 
 
-## v0.16.1 scaffold validation additions
+## v0.17.0 scaffold validation additions
 
 ```text
 project-scaffold-structure-present: accepted
@@ -61,11 +61,11 @@ legacy-root-health-reports-archived: accepted
 ```
 
 
-## v0.16.1 repository-smoke addendum
+## v0.17.0 repository-smoke addendum
 
 The agent simulation set now includes `ci://tests/process/repo-smoke-typecheck-passes`; unsafe PR simulations remain unchanged and smoke typecheck must pass before handoff.
 
 
-## v0.16.1 note
+## v0.17.0 note
 
 The simulation remains attached as execution-governance evidence and is linked from the bootstrap completion evidence packet.
