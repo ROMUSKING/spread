@@ -7,14 +7,15 @@
  *
  * @see docs/dev/outbox-polling-reader.md
  */
-import type { OutboxPoller } from "./OutboxPoller";
-import type { SseConnectionManager } from "./SseConnectionManager";
+import type { OutboxPoller } from './OutboxPoller';
+import type { SseConnectionManager } from './SseConnectionManager';
+import { getMetrics } from '@erp/observability';
 
 export class OutboxPollerLoop {
   private running = false;
   private timeoutId: NodeJS.Timeout | null = null;
   private isPolling = false;
-  private pollWatermark = "0";
+  private pollWatermark = '0';
 
   private readonly poller: OutboxPoller;
   private readonly connectionManager: SseConnectionManager;
@@ -23,7 +24,7 @@ export class OutboxPollerLoop {
   constructor(
     poller: OutboxPoller,
     connectionManager: SseConnectionManager,
-    pollIntervalMs: number = 1000
+    pollIntervalMs: number = 1000,
   ) {
     this.poller = poller;
     this.connectionManager = connectionManager;
@@ -87,7 +88,7 @@ export class OutboxPollerLoop {
         }
         workbooks.add(conn.workbookId);
 
-        const connWatermark = BigInt(conn.highWatermark || "0");
+        const connWatermark = BigInt(conn.highWatermark || '0');
         if (minWatermark === null || connWatermark < minWatermark) {
           minWatermark = connWatermark;
         }
@@ -107,7 +108,10 @@ export class OutboxPollerLoop {
         workbookIdsByTenant,
       };
 
-      const result = await this.poller.pollOnce(effectivePollWatermark, subscriptions);
+      const result = await this.poller.pollOnce(
+        effectivePollWatermark,
+        subscriptions,
+      );
 
       if (result.events.length > 0) {
         for (const event of result.events) {
@@ -120,7 +124,7 @@ export class OutboxPollerLoop {
             if (
               event.tenantId === conn.tenantId &&
               (!event.workbookId || event.workbookId === conn.workbookId) &&
-              eventOutboxId > BigInt(conn.highWatermark || "0")
+              eventOutboxId > BigInt(conn.highWatermark || '0')
             ) {
               conn.send(event);
               conn.highWatermark = event.outboxId;
@@ -131,15 +135,17 @@ export class OutboxPollerLoop {
 
       if (result.syncRequired) {
         const affectedConnections = connections.filter((conn) => {
-          const matchesTarget = result.syncTargets?.some(
-            (target) =>
-              target.tenantId === conn.tenantId &&
-              (target.workbookId === undefined || target.workbookId === conn.workbookId)
-          ) ?? false;
+          const matchesTarget =
+            result.syncTargets?.some(
+              (target) =>
+                target.tenantId === conn.tenantId &&
+                (target.workbookId === undefined ||
+                  target.workbookId === conn.workbookId),
+            ) ?? false;
 
           const matchesRetentionGap =
             result.syncMinOutboxId !== undefined &&
-            BigInt(conn.highWatermark || "0") < BigInt(result.syncMinOutboxId);
+            BigInt(conn.highWatermark || '0') < BigInt(result.syncMinOutboxId);
 
           return matchesTarget || matchesRetentionGap;
         });
@@ -149,11 +155,15 @@ export class OutboxPollerLoop {
         }
       }
 
-      if (BigInt(result.nextHighWatermark || "0") > BigInt(this.pollWatermark)) {
+      if (
+        BigInt(result.nextHighWatermark || '0') > BigInt(this.pollWatermark)
+      ) {
         this.pollWatermark = result.nextHighWatermark;
       }
     } catch (err) {
-      console.error("Error in OutboxPollerLoop tick:", err);
+      const m = getMetrics();
+      m.increment('erp_outbox_poller_tick_error_total');
+      console.error('Error in OutboxPollerLoop tick:', err);
     } finally {
       this.isPolling = false;
     }

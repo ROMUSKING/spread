@@ -3,8 +3,8 @@
 // does not require installed optional runtime packages. After `pnpm install` the full types/build work.
 // Real implementation uses 'pg' Pool for Queryable and transactions.
 
-import { Pool, type PoolClient } from "pg";
-import type { Queryable, TransactionClient } from "./transaction";
+import { Pool, type PoolClient } from 'pg';
+import type { Queryable, TransactionClient } from './transaction';
 
 export type PostgresConfig = {
   connectionString?: string;
@@ -15,7 +15,10 @@ let globalPool: Pool | null = null;
 
 export function getPool(config?: PostgresConfig): Pool {
   if (!globalPool) {
-    const connectionString = config?.connectionString || process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/spreadsheet_erp";
+    const connectionString =
+      config?.connectionString ||
+      process.env.DATABASE_URL ||
+      'postgres://postgres:postgres@localhost:5432/spreadsheet_erp';
     globalPool = new Pool({
       connectionString,
       max: config?.max ?? 10,
@@ -47,7 +50,10 @@ export class PostgresQueryable implements Queryable {
     }
   }
 
-  async query<T = unknown>(sql: string, params?: readonly unknown[]): Promise<T> {
+  async query<T = unknown>(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<T> {
     const client = await this.pool.connect();
     try {
       const res = await client.query(sql, params as any[]);
@@ -77,26 +83,37 @@ export function createPostgresQueryable(config?: PostgresConfig): Queryable {
  */
 export async function withPostgresTransaction<T>(
   db: PostgresQueryable | Queryable,
-  fn: (tx: TransactionClient) => Promise<T>
+  fn: (tx: TransactionClient) => Promise<T>,
 ): Promise<T> {
+  if (!db || typeof (db as any).query !== 'function') {
+    throw new Error(
+      'ASSERT_FAILED: withPostgresTransaction requires Queryable db',
+    );
+  }
   const pool = (db as any).rawPool || (db as any).pool || getPool();
   const client: PoolClient = await pool.connect();
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
     const tx: TransactionClient = {
       query: async <U = unknown>(sql: string, params?: readonly unknown[]) => {
         const r = await client.query(sql, params as any[]);
         return r as unknown as U;
       },
-      savepoint: async (name: string) => { await client.query(`SAVEPOINT ${name}`); },
-      rollbackTo: async (name: string) => { await client.query(`ROLLBACK TO SAVEPOINT ${name}`); },
-      release: async (name: string) => { await client.query(`RELEASE SAVEPOINT ${name}`); },
+      savepoint: async (name: string) => {
+        await client.query(`SAVEPOINT ${name}`);
+      },
+      rollbackTo: async (name: string) => {
+        await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+      },
+      release: async (name: string) => {
+        await client.query(`RELEASE SAVEPOINT ${name}`);
+      },
     };
     const result = await fn(tx);
-    await client.query("COMMIT");
+    await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();

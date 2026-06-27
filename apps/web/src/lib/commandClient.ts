@@ -15,7 +15,7 @@ import type {
   SubmitCommandRequest,
   SubmitCommandResponse,
   CommandStatusResponse,
-} from "@erp/contracts/command-api";
+} from '@erp/contracts/command-api';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -39,7 +39,7 @@ export class CommandTimeoutError extends Error {
   readonly commandId: string;
   constructor(commandId: string) {
     super(`Command ${commandId} timed out and status could not be determined`);
-    this.name = "CommandTimeoutError";
+    this.name = 'CommandTimeoutError';
     this.commandId = commandId;
   }
 }
@@ -50,7 +50,7 @@ export class CommandRequestTimeoutError extends Error {
 
   constructor(message: string, commandId?: string) {
     super(message);
-    this.name = "CommandRequestTimeoutError";
+    this.name = 'CommandRequestTimeoutError';
     this.commandId = commandId;
   }
 }
@@ -61,7 +61,7 @@ export class CommandHttpError extends Error {
   readonly commandId: string | undefined;
   constructor(statusCode: number, message: string, commandId?: string) {
     super(message);
-    this.name = "CommandHttpError";
+    this.name = 'CommandHttpError';
     this.statusCode = statusCode;
     this.commandId = commandId;
   }
@@ -111,8 +111,8 @@ async function fetchWithTimeout(
       controller.abort(signal.reason);
     } else {
       const listener = () => controller.abort(signal.reason);
-      signal.addEventListener("abort", listener, { once: true });
-      abortListener = () => signal.removeEventListener("abort", listener);
+      signal.addEventListener('abort', listener, { once: true });
+      abortListener = () => signal.removeEventListener('abort', listener);
     }
   }
 
@@ -141,17 +141,17 @@ async function fetchWithTimeout(
  */
 function buildHeaders(opts: CommandClientOptions): Record<string, string> {
   const headers: Record<string, string> = {
-    "content-type": "application/json",
-    accept: "application/json",
+    'content-type': 'application/json',
+    accept: 'application/json',
   };
   if (opts.correlationId) {
-    headers["x-correlation-id"] = opts.correlationId;
+    headers['x-correlation-id'] = opts.correlationId;
   }
   if (opts.traceId) {
-    headers["x-trace-id"] = opts.traceId;
+    headers['x-trace-id'] = opts.traceId;
   }
   if (opts.tenantId) {
-    headers["x-tenant-id"] = opts.tenantId;
+    headers['x-tenant-id'] = opts.tenantId;
   }
   return headers;
 }
@@ -177,14 +177,14 @@ export async function submitCommand(
   request: SubmitCommandRequest,
   opts: CommandClientOptions = {},
 ): Promise<SubmitCommandResponse> {
-  const baseUrl = opts.baseUrl ?? "";
+  const baseUrl = opts.baseUrl ?? '';
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const headers = buildHeaders(opts);
 
   const response = await fetchWithTimeout(
     `${baseUrl}/api/commands`,
     {
-      method: "POST",
+      method: 'POST',
       headers,
       body: JSON.stringify(request),
     },
@@ -207,7 +207,7 @@ export async function submitCommand(
 
   // --- HTTP error path ---
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch(() => '');
     throw new CommandHttpError(
       response.status,
       `Command submission failed (${response.status}): ${text}`,
@@ -227,15 +227,15 @@ export async function getCommandStatus(
   commandId: string,
   opts: CommandClientOptions = {},
 ): Promise<CommandStatusResponse> {
-  const baseUrl = opts.baseUrl ?? "";
+  const baseUrl = opts.baseUrl ?? '';
   const headers = buildHeaders(opts);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // Remove content-type for GET
-  delete headers["content-type"];
+  delete headers['content-type'];
 
   const response = await fetchWithTimeout(
     `${baseUrl}/api/commands/${encodeURIComponent(commandId)}`,
-    { method: "GET", headers },
+    { method: 'GET', headers },
     timeoutMs,
     opts.signal,
     `Command status query timed out after ${timeoutMs}ms`,
@@ -243,7 +243,7 @@ export async function getCommandStatus(
   );
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch(() => '');
     throw new CommandHttpError(
       response.status,
       `Command status query failed (${response.status}): ${text}`,
@@ -267,7 +267,12 @@ async function pollUntilTerminal(
   commandId: string,
   opts: CommandClientOptions,
 ): Promise<SubmitCommandResponse> {
-  const terminalStatuses = new Set(["committed", "rejected", "failed", "ambiguous"]);
+  const terminalStatuses = new Set([
+    'committed',
+    'rejected',
+    'failed',
+    'ambiguous',
+  ]);
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await sleep(POLL_INTERVAL_MS);

@@ -6,7 +6,7 @@ export type NumericTransferDraft = {
   ledgerCode: string;
   movementKind: string;
   payloadHash: string;
-  
+
   // Extended fields for DB mapping
   commandId?: string;
   commandLineIndex?: number;
@@ -25,10 +25,14 @@ export type NumericTransferDraft = {
 };
 
 export type NumericLedgerResult =
-  | { status: "created"; transferIdDec: string }
-  | { status: "exists_same_payload"; transferIdDec: string }
-  | { status: "exists_different_payload"; transferIdDec: string; code: "TRANSFER_PAYLOAD_HASH_CONFLICT" }
-  | { status: "rejected"; code: string; message: string };
+  | { status: 'created'; transferIdDec: string }
+  | { status: 'exists_same_payload'; transferIdDec: string }
+  | {
+      status: 'exists_different_payload';
+      transferIdDec: string;
+      code: 'TRANSFER_PAYLOAD_HASH_CONFLICT';
+    }
+  | { status: 'rejected'; code: string; message: string };
 
 export interface NumericLedgerPort {
   createTransfer(draft: NumericTransferDraft): Promise<NumericLedgerResult>;
@@ -36,45 +40,77 @@ export interface NumericLedgerPort {
 
 export class PostgresMvpNumericLedgerAdapter implements NumericLedgerPort {
   private readonly tenantId: string;
-  private readonly tx: { query: (sql: string, params?: readonly unknown[]) => Promise<unknown> };
+  private readonly tx: {
+    query: (sql: string, params?: readonly unknown[]) => Promise<unknown>;
+  };
 
   constructor(
     tenantId: string,
-    tx: { query: (sql: string, params?: readonly unknown[]) => Promise<unknown> }
+    tx: {
+      query: (sql: string, params?: readonly unknown[]) => Promise<unknown>;
+    },
   ) {
+    if (!tenantId)
+      throw new Error(
+        'ASSERT_FAILED: PostgresMvpNumericLedgerAdapter requires tenantId',
+      );
+    if (!tx || typeof tx.query !== 'function')
+      throw new Error(
+        'ASSERT_FAILED: NumericLedgerPort requires tx with query',
+      );
     this.tenantId = tenantId;
     this.tx = tx;
   }
 
-  async createTransfer(draft: NumericTransferDraft): Promise<NumericLedgerResult> {
+  async createTransfer(
+    draft: NumericTransferDraft,
+  ): Promise<NumericLedgerResult> {
     if (draft.debitAccountIdDec === draft.creditAccountIdDec) {
-      return { status: "rejected", code: "SELF_TRANSFER_REJECTED", message: "Debit and credit accounts must differ." };
+      return {
+        status: 'rejected',
+        code: 'SELF_TRANSFER_REJECTED',
+        message: 'Debit and credit accounts must differ.',
+      };
     }
 
     try {
-      const checkSql = "SELECT transfer_payload_hash FROM numeric_transfers WHERE tenant_id = $1 AND transfer_id_dec = $2";
-      const checkRes = (await this.tx.query(checkSql, [this.tenantId, draft.transferIdDec])) as any;
+      const checkSql =
+        'SELECT transfer_payload_hash FROM numeric_transfers WHERE tenant_id = $1 AND transfer_id_dec = $2';
+      const checkRes = (await this.tx.query(checkSql, [
+        this.tenantId,
+        draft.transferIdDec,
+      ])) as any;
       const rows = checkRes?.rows || checkRes || [];
       if (rows.length > 0) {
         const existingHash = rows[0].transfer_payload_hash;
         if (existingHash === draft.payloadHash) {
-          return { status: "exists_same_payload", transferIdDec: draft.transferIdDec };
+          return {
+            status: 'exists_same_payload',
+            transferIdDec: draft.transferIdDec,
+          };
         } else {
-          return { status: "exists_different_payload", transferIdDec: draft.transferIdDec, code: "TRANSFER_PAYLOAD_HASH_CONFLICT" };
+          return {
+            status: 'exists_different_payload',
+            transferIdDec: draft.transferIdDec,
+            code: 'TRANSFER_PAYLOAD_HASH_CONFLICT',
+          };
         }
       }
     } catch (err) {
       // If table doesn't exist or other DB issues in unit tests, we proceed or log
     }
 
-    const commandId = draft.commandId || "00000000-0000-0000-0000-000000000000";
+    const commandId = draft.commandId || '00000000-0000-0000-0000-000000000000';
     const commandLineIndex = draft.commandLineIndex ?? 0;
-    const ledgerGroupId = draft.ledgerGroupId || "00000000-0000-0000-0000-000000000000";
+    const ledgerGroupId =
+      draft.ledgerGroupId || '00000000-0000-0000-0000-000000000000';
     const transferCode = draft.transferCode ?? 1;
-    const mode = draft.mode || "single_phase";
-    const status = draft.status || "posted";
-    const domainObjectRef = draft.domainObjectRef ? JSON.stringify(draft.domainObjectRef) : "{}";
-    const userData = draft.userData ? JSON.stringify(draft.userData) : "{}";
+    const mode = draft.mode || 'single_phase';
+    const status = draft.status || 'posted';
+    const domainObjectRef = draft.domainObjectRef
+      ? JSON.stringify(draft.domainObjectRef)
+      : '{}';
+    const userData = draft.userData ? JSON.stringify(draft.userData) : '{}';
 
     const insertSql = `
       INSERT INTO numeric_transfers (
@@ -115,17 +151,25 @@ export class PostgresMvpNumericLedgerAdapter implements NumericLedgerPort {
         userData,
         draft.originalBusinessAt ?? null,
         draft.postedAt ?? null,
-        draft.expiresAt ?? null
+        draft.expiresAt ?? null,
       ]);
-      return { status: "created", transferIdDec: draft.transferIdDec };
+      return { status: 'created', transferIdDec: draft.transferIdDec };
     } catch (err) {
-      return { status: "rejected", code: "DATABASE_INSERT_FAILED", message: err instanceof Error ? err.message : String(err) };
+      return {
+        status: 'rejected',
+        code: 'DATABASE_INSERT_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 }
 
 export class TigerBeetleShadowAdapter implements NumericLedgerPort {
-  async createTransfer(_draft: NumericTransferDraft): Promise<NumericLedgerResult> {
-    throw new Error("TigerBeetle runtime is post-MVP and must not be used in Phase 0 edit path.");
+  async createTransfer(
+    _draft: NumericTransferDraft,
+  ): Promise<NumericLedgerResult> {
+    throw new Error(
+      'TigerBeetle runtime is post-MVP and must not be used in Phase 0 edit path.',
+    );
   }
 }

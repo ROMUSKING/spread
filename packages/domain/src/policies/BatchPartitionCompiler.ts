@@ -9,7 +9,7 @@
  * @see docs/gates/P0-BATCH-001-transactional-batch-partition-validation.md
  */
 
-import { getTracer, getMetrics } from "@erp/observability";
+import { getTracer, getMetrics } from '@erp/observability';
 
 export type BatchPartitionPolicy = {
   version: string;
@@ -31,7 +31,7 @@ export type BatchPartitionPolicy = {
     name: string;
     expression: string;
   }>;
-  fallbackBehavior: "atomic" | "reject";
+  fallbackBehavior: 'atomic' | 'reject';
 };
 
 export type Mutation = {
@@ -85,7 +85,10 @@ export class UnionFind {
 /**
  * Evaluate custom domain rule expression (e.g. "quantity >= 0")
  */
-function evaluateRule(fields: Record<string, any>, expression: string): boolean {
+function evaluateRule(
+  fields: Record<string, any>,
+  expression: string,
+): boolean {
   const match = expression.match(/^(\w+)\s*(>=|<=|>|<|==|!=)\s*(-?\d+)$/);
   if (!match) {
     throw new Error(`Unsupported expression format: ${expression}`);
@@ -98,17 +101,24 @@ function evaluateRule(fields: Record<string, any>, expression: string): boolean 
     throw new Error(`Unknown field: ${field}`);
   }
   const val = parseFloat(valStr);
-  const actual = typeof value === "number" ? value : parseFloat(String(value));
+  const actual = typeof value === 'number' ? value : parseFloat(String(value));
   if (isNaN(actual)) return false;
 
   switch (operator) {
-    case ">=": return actual >= val;
-    case "<=": return actual <= val;
-    case ">": return actual > val;
-    case "<": return actual < val;
-    case "==": return actual === val;
-    case "!=": return actual !== val;
-    default: return false;
+    case '>=':
+      return actual >= val;
+    case '<=':
+      return actual <= val;
+    case '>':
+      return actual > val;
+    case '<':
+      return actual < val;
+    case '==':
+      return actual === val;
+    case '!=':
+      return actual !== val;
+    default:
+      return false;
   }
 }
 
@@ -118,8 +128,8 @@ function isPolicyPartitioningError(error: unknown): boolean {
   }
 
   return (
-    error.message.includes("Compile timeout exceeded") ||
-    error.message.includes("Hidden dependency or unknown field")
+    error.message.includes('Compile timeout exceeded') ||
+    error.message.includes('Hidden dependency or unknown field')
   );
 }
 
@@ -130,15 +140,20 @@ function isPolicyPartitioningError(error: unknown): boolean {
 export function compilePartitions(
   mutations: Mutation[],
   policy: BatchPartitionPolicy,
-  timeoutMs: number = 200
+  timeoutMs: number = 200,
 ): Mutation[][] {
   const compileStart = Date.now();
   const tracer = getTracer();
   const metrics = getMetrics();
   let edgeCount = 0;
-  
+
   if (!policy) {
-    throw new Error("Missing batch partition policy");
+    throw new Error('ASSERT_FAILED: Missing batch partition policy');
+  }
+  if (!Array.isArray(mutations)) {
+    throw new Error(
+      'ASSERT_FAILED: mutations must be array for compilePartitions',
+    );
   }
 
   const uf = new UnionFind();
@@ -157,7 +172,9 @@ export function compilePartitions(
     }
 
     if (mutation.objectName && mutation.recordId) {
-      const recordsById = targetMutationsByObject.get(mutation.objectName) ?? new Map<string, Mutation[]>();
+      const recordsById =
+        targetMutationsByObject.get(mutation.objectName) ??
+        new Map<string, Mutation[]>();
       const recordMutations = recordsById.get(mutation.recordId) ?? [];
       recordMutations.push(mutation);
       recordsById.set(mutation.recordId, recordMutations);
@@ -173,7 +190,7 @@ export function compilePartitions(
     const partitionGroups = new Map<string, Mutation[]>();
     for (const m of mutations) {
       if (Date.now() - compileStart > timeoutMs) {
-        throw new Error("Compile timeout exceeded");
+        throw new Error('Compile timeout exceeded');
       }
 
       const keyValues: string[] = [];
@@ -184,7 +201,7 @@ export function compilePartitions(
         }
         keyValues.push(String(val));
       }
-      const groupKey = keyValues.join(":");
+      const groupKey = keyValues.join(':');
       let group = partitionGroups.get(groupKey);
       if (!group) {
         group = [];
@@ -207,12 +224,13 @@ export function compilePartitions(
     if (policy.foreignKeys) {
       for (const fk of policy.foreignKeys) {
         if (Date.now() - compileStart > timeoutMs) {
-          throw new Error("Compile timeout exceeded");
+          throw new Error('Compile timeout exceeded');
         }
 
-        const targetObj = fk.references.split(".")[0];
+        const targetObj = fk.references.split('.')[0];
         const targetMutations = targetObj
-          ? targetMutationsByObject.get(targetObj) ?? new Map<string, Mutation[]>()
+          ? (targetMutationsByObject.get(targetObj) ??
+            new Map<string, Mutation[]>())
           : new Map<string, Mutation[]>();
 
         for (const mutation of mutations) {
@@ -235,7 +253,7 @@ export function compilePartitions(
       for (const formula of policy.formulaReferences) {
         const formulaMutations = fieldToMutations.get(formula.field) ?? [];
         const dependencyMutations = formula.dependsOn.flatMap(
-          (dependency) => fieldToMutations.get(dependency) ?? []
+          (dependency) => fieldToMutations.get(dependency) ?? [],
         );
 
         if (formulaMutations.length === 0 && dependencyMutations.length === 0) {
@@ -243,8 +261,13 @@ export function compilePartitions(
         }
 
         for (const dependency of formula.dependsOn) {
-          if (formulaMutations.length > 0 && (fieldToMutations.get(dependency)?.length ?? 0) === 0) {
-            throw new Error(`Hidden dependency or unknown field: ${dependency}`);
+          if (
+            formulaMutations.length > 0 &&
+            (fieldToMutations.get(dependency)?.length ?? 0) === 0
+          ) {
+            throw new Error(
+              `Hidden dependency or unknown field: ${dependency}`,
+            );
           }
         }
 
@@ -263,14 +286,20 @@ export function compilePartitions(
     if (policy.aggregateDependencies) {
       for (const aggregate of policy.aggregateDependencies) {
         const aggregateMutations = fieldToMutations.get(aggregate.field) ?? [];
-        const dependencyMutations = fieldToMutations.get(aggregate.dependsOn) ?? [];
+        const dependencyMutations =
+          fieldToMutations.get(aggregate.dependsOn) ?? [];
 
-        if (aggregateMutations.length === 0 && dependencyMutations.length === 0) {
+        if (
+          aggregateMutations.length === 0 &&
+          dependencyMutations.length === 0
+        ) {
           continue;
         }
 
         if (aggregateMutations.length > 0 && dependencyMutations.length === 0) {
-          throw new Error(`Hidden dependency or unknown field: ${aggregate.dependsOn}`);
+          throw new Error(
+            `Hidden dependency or unknown field: ${aggregate.dependsOn}`,
+          );
         }
 
         const participants = [...aggregateMutations, ...dependencyMutations];
@@ -298,7 +327,10 @@ export function compilePartitions(
 
     partitions = [...rootGroups.values()];
   } catch (error) {
-    if (policy.fallbackBehavior === "atomic" && isPolicyPartitioningError(error)) {
+    if (
+      policy.fallbackBehavior === 'atomic' &&
+      isPolicyPartitioningError(error)
+    ) {
       partitions = [mutations];
     } else {
       throw error;
@@ -311,7 +343,9 @@ export function compilePartitions(
       for (const m of partition) {
         for (const rule of policy.customDomainRules) {
           if (!evaluateRule(m.fields, rule.expression)) {
-            throw new Error(`Validation failed for custom rule "${rule.name}" on row ${m.rowId}`);
+            throw new Error(
+              `Validation failed for custom rule "${rule.name}" on row ${m.rowId}`,
+            );
           }
         }
       }
@@ -319,22 +353,22 @@ export function compilePartitions(
   }
 
   const durationMs = Date.now() - compileStart;
-  const span = tracer.startSpan("erp.batch.partition", {
+  const span = tracer.startSpan('erp.batch.partition', {
     vertices: mutations.length,
     edges: edgeCount,
     components: partitions.length,
-    duration_ms: durationMs
+    duration_ms: durationMs,
   });
   span.end();
 
-  let rowBucket = "<100";
-  if (mutations.length >= 10000) rowBucket = "10k";
-  else if (mutations.length >= 1000) rowBucket = "1k";
-  else if (mutations.length >= 100) rowBucket = "100-999";
+  let rowBucket = '<100';
+  if (mutations.length >= 10000) rowBucket = '10k';
+  else if (mutations.length >= 1000) rowBucket = '1k';
+  else if (mutations.length >= 100) rowBucket = '100-999';
 
-  metrics.observe("erp_batch_partition_validation_ms", durationMs, {
-    workbook_key: policy.workbook || "unknown",
-    row_bucket: rowBucket
+  metrics.observe('erp_batch_partition_validation_ms', durationMs, {
+    workbook_key: policy.workbook || 'unknown',
+    row_bucket: rowBucket,
   });
 
   return partitions;
