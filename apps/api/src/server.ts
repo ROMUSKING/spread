@@ -235,15 +235,12 @@ export async function startApi(): Promise<void> {
           req.headers['traceparent']?.toString();
         const correlationId = req.headers['x-correlation-id']?.toString();
 
-        // Client identity allowlist / validation at entry (fail fast before processor)
+        // Client identity allowlist / validation at entry (fail fast before rate/processor; explicit reject, no silent remap)
         if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
-          console.debug(
-            '[pilot-demo] remapped non-pilot tenant/workbook to defaults',
-          );
+          res.writeHead(400, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          return;
         }
-        if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        if (!ALLOWED_WORKBOOKS.includes(workbookId)) workbookId = DEFAULT_WORKBOOK;
-        // Fail fast on unknown (in non-pilot would reject; here force + log)
         if (!tenantId || !workbookId) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid_client_identity' }));
@@ -286,14 +283,15 @@ export async function startApi(): Promise<void> {
 
       if (url.pathname.startsWith('/api/commands/') && req.method === 'GET') {
         const commandId = url.pathname.split('/').pop() || '';
-        let tenantId = req.headers['x-tenant-id']?.toString() || DEFAULT_TENANT;
-        const wbHdr =
-          req.headers['x-workbook-id']?.toString() || DEFAULT_WORKBOOK;
+        const tenantId = req.headers['x-tenant-id']?.toString() || DEFAULT_TENANT;
+        const wbHdr = req.headers['x-workbook-id']?.toString() || DEFAULT_WORKBOOK;
+        // Fail fast explicit reject (no silent remap); wb threaded for future lookup match
         if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(wbHdr)) {
-          console.debug('[pilot-demo] remapped non-pilot for status');
+          res.writeHead(400, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          return;
         }
-        if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        const status = await getCommandStatusRoute(tenantId, commandId);
+        const status = await getCommandStatusRoute(tenantId, commandId, wbHdr);
         if (!status) {
           res.writeHead(404, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'not_found' }));
@@ -313,13 +311,12 @@ export async function startApi(): Promise<void> {
           url.searchParams.get('workbookId') ||
           req.headers['x-workbook-id']?.toString() ||
           DEFAULT_WORKBOOK;
+        // Explicit 400 reject (no remap) for /workbooks
         if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
-          console.debug(
-            '[pilot-demo] remapped non-pilot tenant/workbook to defaults',
-          );
+          res.writeHead(400, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          return;
         }
-        if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        if (!ALLOWED_WORKBOOKS.includes(workbookId)) workbookId = DEFAULT_WORKBOOK;
         if (!tenantId || !workbookId) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid_client_identity' }));
@@ -382,13 +379,12 @@ export async function startApi(): Promise<void> {
           url.searchParams.get('workbookId') ||
           req.headers['x-workbook-id']?.toString() ||
           DEFAULT_WORKBOOK;
+        // Explicit 400 reject (no remap) for /events; wb for SSE demand
         if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(workbookId)) {
-          console.debug(
-            '[pilot-demo] remapped non-pilot tenant/workbook to defaults',
-          );
+          res.writeHead(400, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'invalid_client_identity', message: 'unknown tenant or workbook' }));
+          return;
         }
-        if (tenantId !== DEFAULT_TENANT) tenantId = DEFAULT_TENANT;
-        if (!ALLOWED_WORKBOOKS.includes(workbookId)) workbookId = DEFAULT_WORKBOOK;
         if (!tenantId || !workbookId) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid_client_identity' }));

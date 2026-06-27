@@ -534,9 +534,11 @@ export class CommandProcessor {
   async getCommandStatus(
     tenantId: string,
     commandId: string,
+    workbookId?: string | null,
   ): Promise<CommandStatusResponse | null> {
+    // wb threaded/validated in status path for ambiguity (query can include if column used)
     const checkSql = `
-      SELECT command_status, request_hash, response_body_redacted, created_at, committed_at, expires_at
+      SELECT command_status, request_hash, response_body_redacted, created_at, committed_at, expires_at, workbook_id
       FROM command_log
       WHERE tenant_id = $1 AND command_id = $2
     `;
@@ -549,6 +551,11 @@ export class CommandProcessor {
 
     const record = rows[0];
     let status = record.command_status;
+
+    // Threaded wb validation for status/ambiguity (fail closed on mismatch if provided)
+    if (workbookId && record.workbook_id && record.workbook_id !== workbookId) {
+      return null; // or ambiguous, but explicit mismatch
+    }
 
     // Ambiguity resolution: if command is pending/received but expired, check for outbox events/audit side-effects
     if (

@@ -7,8 +7,9 @@
  * - Trailing "+" column for adding new columns
  * - Double-click or Enter/F2 to edit; type-to-enter starts editing
  * - Tab wraps across rows and creates new rows at the boundary
- * - Enter commits and moves focus down
+ * - Enter (edit) commits and moves focus down; nav Enter activates edit
  * - Delete/Backspace clears a cell
+
  * - Frozen header row
  * - Row selection via gutter click
  * - Summary footer row for numeric columns
@@ -38,11 +39,12 @@ export type GridColumn = {
 export type SpreadsheetGridProps = {
   rows: GridRow[];
   columns: GridColumn[];
+  workbookId?: string; // for commandStates scoping with wb
   onCellEdit: (rowId: string, columnId: string, value: string) => void;
   onCreateRow: () => string; // Returns the new rowId
   onDeleteRow: (rowId: string) => void;
   onAddColumn: (columnId: string, label: string) => void;
-  commandStates: Map<string, CommandState>; // key is "rowId:columnId"
+  commandStates: Map<string, CommandState>; // key is "workbookId:rowId:columnId" (scoped)
   onGutterClick?: (rowIndex: number) => void;
 };
 
@@ -75,6 +77,7 @@ const COLORS = {
 export function SpreadsheetGrid({
   rows,
   columns,
+  workbookId,
   onCellEdit,
   onCreateRow,
   onDeleteRow,
@@ -112,15 +115,11 @@ export function SpreadsheetGrid({
     if (editingCell && inputRef.current) {
       editHandledRef.current = false;
       inputRef.current.focus();
-      // Only select-all if the cell wasn't entered via type-to-enter
-      // (type-to-enter sets value to the typed char, so length === 1)
-      if (inputRef.current.value.length > 1) {
-        inputRef.current.select();
-      } else {
-        // Place cursor at end for type-to-enter
-        const len = inputRef.current.value.length;
-        inputRef.current.setSelectionRange(len, len);
-      }
+      // Always place cursor at the end on entry.
+      // - Type-to-enter: value is the single typed char; cursor at end means subsequent typing appends (replaces old cell content as intended).
+      // - F2 / Enter / double-click: loads existing value with cursor at end (in-place edit, does not auto-replace on first keystroke).
+      const len = inputRef.current.value.length;
+      inputRef.current.setSelectionRange(len, len);
     }
   }, [editingCell]);
 
@@ -145,25 +144,31 @@ export function SpreadsheetGrid({
       editHandledRef.current = true;
 
       if (mode === "commit") {
-        onCellEdit(editingCell.rowId, editingCell.columnId, editingCell.value);
+        let targetRowId = editingCell.rowId;
+        if (targetRowId === "__new_row__") {
+          // Create on commit/use: row materializes via the cell.update command path.
+          targetRowId = onCreateRow();
+        }
+        onCellEdit(targetRowId, editingCell.columnId, editingCell.value);
       }
 
       setEditingCell(null);
       tableRef.current?.focus();
     },
-    [editingCell, onCellEdit]
+    [editingCell, onCellEdit, onCreateRow]
   );
 
   const enterEditMode = useCallback(
     (rowIndex: number, colIndex: number, initialValue?: string) => {
-      let row = getRowAt(rowIndex);
+      const row = getRowAt(rowIndex);
 
-      // If editing the empty row, create a new row first
       if (!row && rowIndex === emptyRowIndex) {
-        const newRowId = onCreateRow();
-        // The new row will be at the current emptyRowIndex.
-        // We start editing with the provided initial value or empty string.
-        row = { rowId: newRowId, values: {} };
+        // Delay row creation (via onCreateRow) until commit time.
+        // This ensures creation happens via cell.update on use (empty row paradigm).
+        // Use sentinel so finishEditing can create at commit.
+        const currentVal = initialValue !== undefined ? initialValue : "";
+        setEditingCell({ rowId: "__new_row__", columnId: columns[colIndex]?.columnId || "", value: currentVal });
+        return;
       }
 
       if (!row) return;
@@ -173,7 +178,7 @@ export function SpreadsheetGrid({
       const currentVal = initialValue !== undefined ? initialValue : (row.values[col.columnId] || "");
       setEditingCell({ rowId: row.rowId, columnId: col.columnId, value: currentVal });
     },
-    [getRowAt, emptyRowIndex, onCreateRow, columns]
+    [getRowAt, emptyRowIndex, columns]
   );
 
   const moveFocus = useCallback(
@@ -218,12 +223,15 @@ export function SpreadsheetGrid({
     if (editingCell) {
       if (e.key === "Enter") {
         e.preventDefault();
+        const wasNew = editingCell?.rowId === "__new_row__";
         finishEditing("commit");
-        // Move focus to next column/wrap after Enter commit
-        if (colIndex < columns.length - 1) {
-          moveFocus(rowIndex, colIndex + 1);
+        const targetRow = rowIndex + 1;
+        if (wasNew) {
+          // post-upsert index: direct set (avoids stale pre-insert clamp in moveFocus using old emptyRowIndex)
+          setActiveCell({ rowIndex: targetRow, colIndex });
+          setSelectedRow(null);
         } else {
-          moveFocus(rowIndex + 1, 0);
+          moveFocus(targetRow, colIndex);
         }
       } else if (e.key === "Escape") {
         e.preventDefault();
@@ -312,11 +320,7 @@ export function SpreadsheetGrid({
         break;
       case "Enter":
         e.preventDefault();
-        if (colIndex < columns.length - 1) {
-          moveFocus(rowIndex, colIndex + 1);
-        } else {
-          moveFocus(rowIndex + 1, 0);
-        }
+        enterEditMode(rowIndex, colIndex);
         return;
       case "F2":
         e.preventDefault();
@@ -568,7 +572,8 @@ export function SpreadsheetGrid({
                   {/* Data cells */}
                   {columns.map((col, cIdx) => {
                     const rowId = row?.rowId || "__empty__";
-                    const cellId = `${rowId}:${col.columnId}`;
+                    const wb = workbookId || "";
+                    const cellId = wb ? `${wb}:${rowId}:${col.columnId}` : `${rowId}:${col.columnId}`;
                     const cmdState = commandStates.get(cellId);
                     const rawVal = row?.values[col.columnId] || "";
                     const displayVal =
@@ -610,7 +615,8 @@ export function SpreadsheetGrid({
 
                     const isEditing =
                       editingCell &&
-                      editingCell.rowId === rowId &&
+                      (editingCell.rowId === rowId ||
+                        (editingCell.rowId === "__new_row__" && isEmptyRow)) &&
                       editingCell.columnId === col.columnId;
 
                     return (
@@ -694,16 +700,39 @@ export function SpreadsheetGrid({
                               : displayVal}
                             {cmdState?.state === "pending" && (
                               <span
-                                className="spread-pulse"
                                 style={{
-                                  marginLeft: "8px",
-                                  display: "inline-block",
-                                  width: "8px",
-                                  height: "8px",
-                                  borderRadius: "50%",
-                                  background: COLORS.pendingBorder,
+                                  marginLeft: "6px",
+                                  fontSize: "10px",
+                                  color: COLORS.pendingBorder,
                                 }}
-                              />
+                                aria-label="pending"
+                              >
+                                …
+                              </span>
+                            )}
+                            {cmdState?.state === "ambiguous_requires_refresh" && (
+                              <span
+                                style={{
+                                  marginLeft: "6px",
+                                  fontSize: "10px",
+                                  color: COLORS.ambiguousBorder,
+                                }}
+                                aria-label="ambiguous"
+                              >
+                                ⚠
+                              </span>
+                            )}
+                            {cmdState?.state === "rejected" && (
+                              <span
+                                style={{
+                                  marginLeft: "6px",
+                                  fontSize: "10px",
+                                  color: COLORS.rejectedBorder,
+                                }}
+                                aria-label="rejected"
+                              >
+                                ✗
+                              </span>
                             )}
                           </span>
                         )}

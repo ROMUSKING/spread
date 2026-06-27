@@ -46,9 +46,11 @@ export async function submitCommand(
 export async function getCommandStatusRoute(
   tenantId: string,
   commandId: string,
+  workbookId?: string | null,
 ): Promise<CommandStatusResponse | null> {
   const processor = getCommandProcessor();
-  return processor.getCommandStatus(tenantId, commandId);
+  // wb threaded for validation/ambiguity context (processor may assert match)
+  return processor.getCommandStatus(tenantId, commandId, workbookId);
 }
 
 export async function submitCommandStub(

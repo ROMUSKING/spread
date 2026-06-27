@@ -292,6 +292,7 @@ export function TiledWorkspace({
                     <SpreadsheetGrid
                       rows={rows}
                       columns={columns}
+                      workbookId={tile.workbookId}
                       onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
                       onCreateRow={() => onCreateRow(tile.workbookId)}
                       onDeleteRow={(rowId) => onDeleteRow(tile.workbookId, rowId)}
@@ -330,6 +331,7 @@ export function TiledWorkspace({
                   <TransposedDetail
                     row={selectedRow}
                     columns={columns}
+                    workbookId={tile.workbookId}
                     onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
                     commandStates={commandStates}
                   />

@@ -11,9 +11,10 @@ interface TransposedDetailProps {
 export function TransposedDetail({
   row,
   columns,
+  workbookId,
   onCellEdit,
   commandStates,
-}: TransposedDetailProps) {
+}: TransposedDetailProps & { workbookId?: string }) {
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const [editingField, setEditingField] = useState<string | null>(null);
 
@@ -82,7 +83,8 @@ export function TransposedDetail({
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
         {columns.map((col) => {
-          const cellId = `${row.rowId}:${col.columnId}`;
+          const wb = workbookId || "";
+          const cellId = wb ? `${wb}:${row.rowId}:${col.columnId}` : `${row.rowId}:${col.columnId}`;
           const cmdState = commandStates.get(cellId);
           const displayVal = cmdState && cmdState.state !== "rejected" ? cmdState.value : (editedValues[col.columnId] || "");
           const isFieldEditing = editingField === col.columnId;
@@ -104,6 +106,10 @@ export function TransposedDetail({
               borderStyle = "1px solid #ef4444";
               backgroundStyle = "rgba(239, 68, 68, 0.05)";
               statusText = cmdState.error || "Rejected";
+            } else if (cmdState.state === "ambiguous_requires_refresh") {
+              borderStyle = "1px solid #f97316";
+              backgroundStyle = "rgba(249, 115, 22, 0.05)";
+              statusText = "Ambiguous. Refresh required.";
             }
           }
 
