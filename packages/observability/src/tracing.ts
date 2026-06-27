@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 export type SpanAttributes = Record<string, string | number | boolean | undefined>;
 
 export interface SpanLike {
@@ -75,22 +77,41 @@ export class InMemoryTracer implements TracerLike {
  * Parsers and helpers for W3C traceparents and fallback IDs.
  */
 export function parseOrGenerateTraceContext(traceparent?: string | null): { traceId: string; parentId?: string } {
+  const isValidLowerHex = (value: string, length: number): boolean =>
+    value.length === length && /^[0-9a-f]+$/.test(value);
+
+  const isAllZeros = (value: string): boolean => /^0+$/.test(value);
+
   if (traceparent) {
     const parts = traceparent.split("-");
-    if (parts.length === 4 && parts[0] === "00") {
+    if (parts.length === 4) {
+      const version = parts[0];
       const traceId = parts[1];
       const parentId = parts[2];
-      if (traceId && traceId.length === 32 && parentId && parentId.length === 16) {
+
+      if (
+        version &&
+        version !== "ff" &&
+        isValidLowerHex(version, 2) &&
+        traceId &&
+        isValidLowerHex(traceId, 32) &&
+        !isAllZeros(traceId) &&
+        parentId &&
+        isValidLowerHex(parentId, 16) &&
+        !isAllZeros(parentId) &&
+        parts[3] &&
+        isValidLowerHex(parts[3], 2)
+      ) {
         return { traceId, parentId };
       }
     }
   }
 
   // Fallback random generation for traceId (32-character hex)
-  const chars = "0123456789abcdef";
   let traceId = "";
-  for (let i = 0; i < 32; i++) {
-    traceId += chars[Math.floor(Math.random() * 16)];
+  while (!traceId || isAllZeros(traceId)) {
+    traceId = crypto.randomBytes(16).toString("hex");
   }
+
   return { traceId };
 }

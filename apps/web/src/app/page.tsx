@@ -9,7 +9,7 @@
  */
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { SpreadsheetGrid, type GridRow, type GridColumn, type CommandState } from "../components/SpreadsheetGrid";
 import { useCommand } from "../lib/useCommand";
 import { useSseSubscription } from "../lib/useSseSubscription";
@@ -21,17 +21,104 @@ const COLUMNS: GridColumn[] = [
   { columnId: "total", label: "Total ($)" },
 ];
 
+const INITIAL_ROWS: GridRow[] = [
+  { rowId: "1", values: { item_name: "Premium Desk", quantity: "2", unit_price: "250.00", total: "500.00" } },
+  { rowId: "2", values: { item_name: "Ergonomic Chair", quantity: "5", unit_price: "180.00", total: "900.00" } },
+  { rowId: "3", values: { item_name: "Mechanical Keyboard", quantity: "10", unit_price: "85.00", total: "850.00" } },
+  { rowId: "4", values: { item_name: "USB-C Hub", quantity: "15", unit_price: "45.00", total: "675.00" } },
+  { rowId: "5", values: { item_name: "LED Monitor", quantity: "4", unit_price: "320.00", total: "1280.00" } },
+];
+
+type WorkbookRowsResponse = {
+  rows: Array<{
+    rowId: unknown;
+    values: unknown;
+  }>;
+};
+
+type CommittedCellUpdatePayload = {
+  rowId: string;
+  columnId: string;
+  value: string;
+};
+
+function normalizeGridValue(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+
+  if (value === null) {
+    return "";
+  }
+
+  return null;
+}
+
+function parseCommittedCellUpdatePayload(payload: unknown): CommittedCellUpdatePayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const maybePayload = payload as Record<string, unknown>;
+  const rowId = typeof maybePayload.rowId === "string" ? maybePayload.rowId.trim() : "";
+  const columnId = typeof maybePayload.columnId === "string" ? maybePayload.columnId.trim() : "";
+  const value = normalizeGridValue(maybePayload.value);
+
+  if (!rowId || !columnId || value === null) {
+    return null;
+  }
+
+  return { rowId, columnId, value };
+}
+
+function parseWorkbookRowsResponse(payload: unknown): GridRow[] | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const rows = (payload as WorkbookRowsResponse).rows;
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+
+  const normalizedRows: GridRow[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") {
+      return null;
+    }
+
+    const rowId = typeof row.rowId === "string" ? row.rowId.trim() : "";
+    if (!rowId || !row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
+      return null;
+    }
+
+    const values: Record<string, string> = {};
+    for (const [columnId, value] of Object.entries(row.values as Record<string, unknown>)) {
+      const normalizedValue = normalizeGridValue(value);
+      if (normalizedValue !== null) {
+        values[columnId] = normalizedValue;
+      }
+    }
+
+    normalizedRows.push({ rowId, values });
+  }
+
+  return normalizedRows;
+}
+
 export default function Page() {
   const tenantId = "pilot-tenant";
   const workbookId = "pilot-v1-small";
 
-  const [rows, setRows] = useState<GridRow[]>([
-    { rowId: "1", values: { item_name: "Premium Desk", quantity: "2", unit_price: "250.00", total: "500.00" } },
-    { rowId: "2", values: { item_name: "Ergonomic Chair", quantity: "5", unit_price: "180.00", total: "900.00" } },
-    { rowId: "3", values: { item_name: "Mechanical Keyboard", quantity: "10", unit_price: "85.00", total: "850.00" } },
-    { rowId: "4", values: { item_name: "USB-C Hub", quantity: "15", unit_price: "45.00", total: "675.00" } },
-    { rowId: "5", values: { item_name: "LED Monitor", quantity: "4", unit_price: "320.00", total: "1280.00" } },
-  ]);
+  const [rows, setRows] = useState<GridRow[]>(INITIAL_ROWS);
 
   // Keep track of the active/pending cell change
   const [activeEdit, setActiveEdit] = useState<{
@@ -46,44 +133,103 @@ export default function Page() {
     timeoutMs: 10000,
   });
 
+  const refreshWorkbook = useCallback(
+    async (unlockAfterRefresh: boolean) => {
+      const response = await fetch(
+        `/api/workbooks?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`,
+        {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Workbook refresh failed (${response.status})`);
+      }
+
+      const nextRows = parseWorkbookRowsResponse(await response.json());
+      if (!nextRows) {
+        throw new Error("Workbook refresh returned an invalid row payload");
+      }
+
+      setRows(nextRows);
+
+      if (unlockAfterRefresh) {
+        setActiveEdit(null);
+        cmd.refresh();
+      }
+    },
+    [cmd.refresh, tenantId, workbookId]
+  );
+
   // Handle server-forced full refresh
-  const handleSyncRequired = () => {
+  const handleSyncRequired = useCallback(() => {
     console.warn("SYNC_REQUIRED received from outbox. Performing full workbook refresh.");
-    // Reset any optimistic states and fetch fresh state
-    setActiveEdit(null);
-  };
+
+    void refreshWorkbook(true).catch((error: unknown) => {
+      console.error("Workbook refresh failed after SYNC_REQUIRED:", error);
+    });
+  }, [refreshWorkbook]);
 
   // SSE Subscription for live stream updates
   const sse = useSseSubscription(tenantId, workbookId, handleSyncRequired);
+
+  useEffect(() => {
+    void refreshWorkbook(false).catch((error: unknown) => {
+      console.error("Initial workbook refresh failed; keeping seeded rows:", error);
+    });
+  }, [refreshWorkbook]);
 
   // Apply inbound SSE events to local grid state
   useEffect(() => {
     if (sse.events.length === 0) return;
     const latestEvent = sse.events[sse.events.length - 1];
-    if (latestEvent && latestEvent.eventType === "cell.update.committed" && latestEvent.payload) {
-      const { rowId, columnId, value } = latestEvent.payload as any;
-      if (rowId && columnId) {
-        setRows((prev) =>
-          prev.map((r) => {
-            if (r.rowId === rowId) {
-              const updatedValues: Record<string, string> = { ...r.values, [columnId]: value };
-              // Auto-calculate total if quantity or price changes
-              if (columnId === "quantity" || columnId === "unit_price") {
-                const qty = parseFloat(updatedValues["quantity"] || "0");
-                const price = parseFloat(updatedValues["unit_price"] || "0");
-                updatedValues["total"] = (qty * price).toFixed(2);
-              }
-              return { ...r, rowId, values: updatedValues };
-            }
-            return r;
-          })
-        );
+    const committedPayload =
+      latestEvent && latestEvent.eventType === "cell.update.committed"
+        ? parseCommittedCellUpdatePayload(latestEvent.payload)
+        : null;
 
-        // If this event matches our current edit, clear the visual status overlay
-        if (activeEdit && activeEdit.rowId === rowId && activeEdit.columnId === columnId) {
-          setActiveEdit(null);
+    if (committedPayload) {
+      setRows((prev) =>
+        prev.map((row) => {
+          if (row.rowId !== committedPayload.rowId) {
+            return row;
+          }
+
+          const updatedValues: Record<string, string> = {
+            ...row.values,
+            [committedPayload.columnId]: committedPayload.value,
+          };
+
+          if (
+            committedPayload.columnId === "quantity" ||
+            committedPayload.columnId === "unit_price"
+          ) {
+            const quantity = Number(updatedValues.quantity);
+            const unitPrice = Number(updatedValues.unit_price);
+
+            if (Number.isFinite(quantity) && Number.isFinite(unitPrice)) {
+              updatedValues.total = (quantity * unitPrice).toFixed(2);
+            }
+          }
+
+          return { ...row, values: updatedValues };
+        })
+      );
+
+      setActiveEdit((current) => {
+        if (
+          current &&
+          current.rowId === committedPayload.rowId &&
+          current.columnId === committedPayload.columnId
+        ) {
+          return null;
         }
-      }
+
+        return current;
+      });
     }
   }, [sse.events]);
 
@@ -218,8 +364,9 @@ export default function Page() {
             </div>
             <button
               onClick={() => {
-                cmd.refresh();
-                setActiveEdit(null);
+                void refreshWorkbook(true).catch((error: unknown) => {
+                  console.error("Workbook refresh failed while unlocking ambiguity:", error);
+                });
               }}
               style={{
                 background: "#f97316",

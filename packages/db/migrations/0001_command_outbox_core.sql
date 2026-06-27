@@ -292,3 +292,33 @@ CREATE TABLE numeric_ledger_migration_state (
   FOREIGN KEY (tenant_id, ledger_code)
     REFERENCES numeric_ledger_catalog (tenant_id, ledger_code)
 );
+
+-- =========================================================================
+-- SECTION 3: Minimal Phase 0 current-state for vertical slice (spreadsheet cells)
+-- Added for safe cell edit demo + tx atomicity evidence. Canonical location.
+-- =========================================================================
+
+CREATE TABLE current_cell_values (
+  tenant_id UUID NOT NULL,
+  workbook_id UUID NOT NULL,
+  row_id TEXT NOT NULL,
+  column_id TEXT NOT NULL,
+  value_text TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (tenant_id, workbook_id, row_id, column_id)
+);
+
+CREATE INDEX idx_current_cell_values_workbook ON current_cell_values (tenant_id, workbook_id);
+
+-- Pilot numeric ledger seed for inventory "stock" quantity (MVP postgres adapter)
+-- Idempotent via ON CONFLICT where possible; simple INSERT for bootstrap (re-runnable in dev).
+INSERT INTO numeric_ledger_catalog (tenant_id, ledger_code, ledger_key, asset_code, asset_kind, scale, authoritative_engine, migration_stage)
+VALUES 
+  ('00000000-0000-0000-0000-000000000001', 1, 'stock_qty', 'QTY', 'stock', 0, 'postgres_mvp', 'mvp')
+ON CONFLICT (tenant_id, ledger_code) DO NOTHING;
+
+INSERT INTO numeric_accounts (tenant_id, account_id_dec, ledger_code, account_key, account_kind, normal_balance, dimensions)
+VALUES 
+  ('00000000-0000-0000-0000-000000000001', '100000000000000000000000000000000001', 1, 'pilot_stock_on_hand', 'asset', 'debit', '{}'::jsonb),
+  ('00000000-0000-0000-0000-000000000001', '200000000000000000000000000000000001', 1, 'pilot_adjustment', 'equity', 'credit', '{}'::jsonb)
+ON CONFLICT (tenant_id, account_id_dec) DO NOTHING;

@@ -1,15 +1,16 @@
 import crypto from "crypto";
 import type { CommandEnvelope, CommandOutcome } from "@erp/domain/commands/types";
-import { PostgresMvpNumericLedgerAdapter } from "../../../../packages/domain/src/ledger/NumericLedgerPort.ts";
+import { PostgresMvpNumericLedgerAdapter } from "@erp/domain/ledger/NumericLedgerPort";
 import type { Queryable, TransactionClient } from "@erp/db/transaction";
-import { withTransaction } from "../../../../packages/db/src/transaction.ts";
+import { withTransaction } from "@erp/db/transaction";
 import type { SubmitCommandRequest, SubmitCommandResponse, CommandStatusResponse } from "@erp/contracts/command-api";
 import type { InsertOutboxEventParams } from "@erp/contracts/events";
 import {
   OutboxRepository,
   generateDeterministicEventId,
   generateIdempotencyKey,
-} from "../outbox/OutboxRepository.ts";
+  serializeOutboxPayload,
+} from "../outbox/OutboxRepository.js";
 import { getTracer, getMetrics, parseOrGenerateTraceContext } from "@erp/observability";
 
 function hashId(id?: string): string {
@@ -279,8 +280,8 @@ export class CommandProcessor {
         // Insert outbox event(s) within the same transaction
         // This ensures AUD-001: every committed command has correlated outbox events
         if (result.status === "committed") {
-          const payloadForOutbox = result.response ?? {};
-          const payloadJson = JSON.stringify(payloadForOutbox);
+          const payloadForOutbox = result.response;
+          const payloadJson = serializeOutboxPayload(payloadForOutbox) ?? "null";
           const payloadHash = crypto.createHash("sha256").update(payloadJson).digest("hex");
           const commandEventSeq = 1; // First (and currently only) event per command
 

@@ -98,9 +98,9 @@ export class TokenBucket {
   /** Current token count. */
   private _tokens: number;
   /** Maximum tokens (effective limit after budget division). */
-  private readonly _maxTokens: number;
+  private _maxTokens: number;
   /** Tokens added per refill interval. */
-  private readonly _refillRate: number;
+  private _refillRate: number;
   /** Refill interval in milliseconds. */
   private readonly _refillIntervalMs: number;
   /** Timestamp (ms) of the last refill calculation. */
@@ -129,6 +129,14 @@ export class TokenBucket {
       this._tokens = Math.min(this._maxTokens, this._tokens + tokensToAdd);
       this._lastRefillTime += intervalsElapsed * this._refillIntervalMs;
     }
+  }
+
+  /** Update the bucket's effective budget after cluster re-division. */
+  updateBudget(maxTokens: number, refillRate: number): void {
+    this.refill();
+    this._maxTokens = maxTokens;
+    this._refillRate = refillRate;
+    this._tokens = Math.min(this._tokens, this._maxTokens);
   }
 
   /**
@@ -186,7 +194,9 @@ export class RateLimiter {
   /** Per-tenant+commandType composite key → TokenBucket. */
   private readonly _buckets: Map<string, TokenBucket> = new Map();
   /** Effective per-instance token budget after division. */
-  private readonly _effectiveMaxTokens: number;
+  private _effectiveMaxTokens: number;
+  /** Effective per-instance refill budget after division. */
+  private _effectiveRefillRate: number;
 
   constructor(config: RateLimiterConfig) {
     const activeInstanceCount =
@@ -202,14 +212,49 @@ export class RateLimiter {
       staleBucketThresholdMs,
     };
 
-    // Budget division: each instance gets a fraction of the global budget
-    // with headroom to tolerate brief instance churn.
-    this._effectiveMaxTokens = Math.max(
-      1,
-      Math.floor(
-        (config.maxTokens / activeInstanceCount) * headroomFactor
-      )
+    const effectiveBudget = this.computeEffectiveBudget(activeInstanceCount);
+    this._effectiveMaxTokens = effectiveBudget.maxTokens;
+    this._effectiveRefillRate = effectiveBudget.refillRate;
+  }
+
+  private computeEffectiveBudget(activeInstanceCount: number): {
+    maxTokens: number;
+    refillRate: number;
+  } {
+    const scaledBudget =
+      (this._config.maxTokens / activeInstanceCount) * this._config.headroomFactor;
+    const scaledRefillRate =
+      (this._config.refillRate / activeInstanceCount) * this._config.headroomFactor;
+
+    return {
+      maxTokens: Math.max(1, Math.floor(scaledBudget)),
+      refillRate: Math.max(0, scaledRefillRate),
+    };
+  }
+
+  private syncEffectiveBudget(): void {
+    const effectiveBudget = this.computeEffectiveBudget(
+      this._config.activeInstanceCount
     );
+    this._effectiveMaxTokens = effectiveBudget.maxTokens;
+    this._effectiveRefillRate = effectiveBudget.refillRate;
+  }
+
+  private getBucket(bucketKey: string): TokenBucket {
+    let bucket = this._buckets.get(bucketKey);
+
+    if (!bucket) {
+      bucket = new TokenBucket(
+        this._effectiveMaxTokens,
+        this._effectiveRefillRate,
+        this._config.refillIntervalMs
+      );
+      this._buckets.set(bucketKey, bucket);
+      return bucket;
+    }
+
+    bucket.updateBudget(this._effectiveMaxTokens, this._effectiveRefillRate);
+    return bucket;
   }
 
   /**
@@ -239,16 +284,7 @@ export class RateLimiter {
     const metrics = getMetrics();
 
     const bucketKey = `${tenantId}:${commandType}`;
-    let bucket = this._buckets.get(bucketKey);
-
-    if (!bucket) {
-      bucket = new TokenBucket(
-        this._effectiveMaxTokens,
-        this._config.refillRate,
-        this._config.refillIntervalMs
-      );
-      this._buckets.set(bucketKey, bucket);
-    }
+    const bucket = this.getBucket(bucketKey);
 
     const result = bucket.tryConsume();
 
@@ -337,8 +373,11 @@ export class RateLimiter {
     const safeCount = Math.max(1, count);
     // Mutate the frozen-looking config (we own it)
     (this._config as { activeInstanceCount: number }).activeInstanceCount = safeCount;
-    // Recalculate is not retroactive for existing buckets (by design:
-    // existing buckets drain naturally; new buckets get the new limit).
+    this.syncEffectiveBudget();
+
+    for (const bucket of this._buckets.values()) {
+      bucket.updateBudget(this._effectiveMaxTokens, this._effectiveRefillRate);
+    }
   }
 
   /** Number of active buckets (for observability). */

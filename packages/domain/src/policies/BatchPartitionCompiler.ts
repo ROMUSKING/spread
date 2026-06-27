@@ -112,6 +112,17 @@ function evaluateRule(fields: Record<string, any>, expression: string): boolean 
   }
 }
 
+function isPolicyPartitioningError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("Compile timeout exceeded") ||
+    error.message.includes("Hidden dependency or unknown field")
+  );
+}
+
 /**
  * Main entrypoint to compile connected components/partitions from a list of mutations.
  * Timeout constraint: default 200ms.
@@ -135,89 +146,166 @@ export function compilePartitions(
     uf.add(m.rowId);
   }
 
-  // 1. Build Partition Key Edges
-  // Group mutations by partition key values (e.g., productId + warehouseId values concatenated)
-  const partitionGroups = new Map<string, Mutation[]>();
-  for (const m of mutations) {
-    if (Date.now() - compileStart > timeoutMs) {
-      throw new Error("Compile timeout exceeded");
+  const fieldToMutations = new Map<string, Mutation[]>();
+  const targetMutationsByObject = new Map<string, Map<string, Mutation[]>>();
+
+  for (const mutation of mutations) {
+    for (const fieldName of Object.keys(mutation.fields)) {
+      const fieldMutations = fieldToMutations.get(fieldName) ?? [];
+      fieldMutations.push(mutation);
+      fieldToMutations.set(fieldName, fieldMutations);
     }
 
-    const keyValues: string[] = [];
-    for (const key of policy.partitionKeys) {
-      const val = m.fields[key];
-      if (val === undefined) {
-        throw new Error(`Hidden dependency or unknown field: ${key}`);
-      }
-      keyValues.push(String(val));
-    }
-    const groupKey = keyValues.join(":");
-    let group = partitionGroups.get(groupKey);
-    if (!group) {
-      group = [];
-      partitionGroups.set(groupKey, group);
-    }
-    group.push(m);
-  }
-
-  for (const group of partitionGroups.values()) {
-    if (group.length > 1) {
-      const first = group[0]!;
-      for (let i = 1; i < group.length; i++) {
-        uf.union(first.rowId, group[i]!.rowId);
-        edgeCount++;
-      }
+    if (mutation.objectName && mutation.recordId) {
+      const recordsById = targetMutationsByObject.get(mutation.objectName) ?? new Map<string, Mutation[]>();
+      const recordMutations = recordsById.get(mutation.recordId) ?? [];
+      recordMutations.push(mutation);
+      recordsById.set(mutation.recordId, recordMutations);
+      targetMutationsByObject.set(mutation.objectName, recordsById);
     }
   }
 
-  // 2. Build Foreign Key Edges
-  if (policy.foreignKeys) {
-    for (const fk of policy.foreignKeys) {
-      const targetObj = fk.references.split(".")[0];
-      for (const m1 of mutations) {
-        const fkVal = m1.fields[fk.field];
-        if (fkVal !== undefined) {
-          // Find if there's any mutation changing the target object with matching recordId
-          for (const m2 of mutations) {
-            if (m2.objectName === targetObj && m2.recordId === String(fkVal)) {
-              uf.union(m1.rowId, m2.rowId);
-              edgeCount++;
-            }
+  let partitions: Mutation[][];
+
+  try {
+    // 1. Build Partition Key Edges
+    // Group mutations by partition key values (e.g., productId + warehouseId values concatenated)
+    const partitionGroups = new Map<string, Mutation[]>();
+    for (const m of mutations) {
+      if (Date.now() - compileStart > timeoutMs) {
+        throw new Error("Compile timeout exceeded");
+      }
+
+      const keyValues: string[] = [];
+      for (const key of policy.partitionKeys) {
+        const val = m.fields[key];
+        if (val === undefined) {
+          throw new Error(`Hidden dependency or unknown field: ${key}`);
+        }
+        keyValues.push(String(val));
+      }
+      const groupKey = keyValues.join(":");
+      let group = partitionGroups.get(groupKey);
+      if (!group) {
+        group = [];
+        partitionGroups.set(groupKey, group);
+      }
+      group.push(m);
+    }
+
+    for (const group of partitionGroups.values()) {
+      if (group.length > 1) {
+        const first = group[0]!;
+        for (let i = 1; i < group.length; i++) {
+          uf.union(first.rowId, group[i]!.rowId);
+          edgeCount++;
+        }
+      }
+    }
+
+    // 2. Build Foreign Key Edges
+    if (policy.foreignKeys) {
+      for (const fk of policy.foreignKeys) {
+        if (Date.now() - compileStart > timeoutMs) {
+          throw new Error("Compile timeout exceeded");
+        }
+
+        const targetObj = fk.references.split(".")[0];
+        const targetMutations = targetObj
+          ? targetMutationsByObject.get(targetObj) ?? new Map<string, Mutation[]>()
+          : new Map<string, Mutation[]>();
+
+        for (const mutation of mutations) {
+          const fkVal = mutation.fields[fk.field];
+          if (fkVal === undefined) {
+            continue;
+          }
+
+          const referencedMutations = targetMutations.get(String(fkVal)) ?? [];
+          for (const referencedMutation of referencedMutations) {
+            uf.union(mutation.rowId, referencedMutation.rowId);
+            edgeCount++;
           }
         }
       }
     }
-  }
 
-  // 3. Build Formula Reference Edges
-  if (policy.formulaReferences) {
-    for (const formula of policy.formulaReferences) {
-      // Check if the formula's dependencies are declared
-      for (const m of mutations) {
-        for (const dep of formula.dependsOn) {
-          if (m.fields[dep] === undefined) {
-            throw new Error(`Hidden dependency or unknown field: ${dep}`);
+    // 3. Build Formula Reference Edges
+    if (policy.formulaReferences) {
+      for (const formula of policy.formulaReferences) {
+        const formulaMutations = fieldToMutations.get(formula.field) ?? [];
+        const dependencyMutations = formula.dependsOn.flatMap(
+          (dependency) => fieldToMutations.get(dependency) ?? []
+        );
+
+        if (formulaMutations.length === 0 && dependencyMutations.length === 0) {
+          continue;
+        }
+
+        for (const dependency of formula.dependsOn) {
+          if (formulaMutations.length > 0 && (fieldToMutations.get(dependency)?.length ?? 0) === 0) {
+            throw new Error(`Hidden dependency or unknown field: ${dependency}`);
+          }
+        }
+
+        const participants = [...formulaMutations, ...dependencyMutations];
+        if (participants.length > 1) {
+          const first = participants[0]!;
+          for (let i = 1; i < participants.length; i++) {
+            uf.union(first.rowId, participants[i]!.rowId);
+            edgeCount++;
           }
         }
       }
     }
-  }
 
-  // 4. Group by root
-  const rootGroups = new Map<string, Mutation[]>();
-  for (const m of mutations) {
-    const root = uf.find(m.rowId);
-    let group = rootGroups.get(root);
-    if (!group) {
-      group = [];
-      rootGroups.set(root, group);
+    // 4. Build Aggregate Dependency Edges
+    if (policy.aggregateDependencies) {
+      for (const aggregate of policy.aggregateDependencies) {
+        const aggregateMutations = fieldToMutations.get(aggregate.field) ?? [];
+        const dependencyMutations = fieldToMutations.get(aggregate.dependsOn) ?? [];
+
+        if (aggregateMutations.length === 0 && dependencyMutations.length === 0) {
+          continue;
+        }
+
+        if (aggregateMutations.length > 0 && dependencyMutations.length === 0) {
+          throw new Error(`Hidden dependency or unknown field: ${aggregate.dependsOn}`);
+        }
+
+        const participants = [...aggregateMutations, ...dependencyMutations];
+        if (participants.length > 1) {
+          const first = participants[0]!;
+          for (let i = 1; i < participants.length; i++) {
+            uf.union(first.rowId, participants[i]!.rowId);
+            edgeCount++;
+          }
+        }
+      }
     }
-    group.push(m);
+
+    // 5. Group by root
+    const rootGroups = new Map<string, Mutation[]>();
+    for (const m of mutations) {
+      const root = uf.find(m.rowId);
+      let group = rootGroups.get(root);
+      if (!group) {
+        group = [];
+        rootGroups.set(root, group);
+      }
+      group.push(m);
+    }
+
+    partitions = [...rootGroups.values()];
+  } catch (error) {
+    if (policy.fallbackBehavior === "atomic" && isPolicyPartitioningError(error)) {
+      partitions = [mutations];
+    } else {
+      throw error;
+    }
   }
 
-  const partitions = [...rootGroups.values()];
-
-  // 5. Validate each component partition against custom domain rules
+  // 6. Validate each component partition against custom domain rules
   if (policy.customDomainRules) {
     for (const partition of partitions) {
       for (const m of partition) {

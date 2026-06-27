@@ -69,7 +69,7 @@ export type InsertOutboxEventParams = {
   targetPlanes: string[];
   schemaVersion: number;
   dataSchema: string;
-  payloadContentType?: string | undefined;
+  payloadContentType: string;
   payload?: unknown | undefined;
   payloadRef?: string | undefined;
   payloadHash: string;

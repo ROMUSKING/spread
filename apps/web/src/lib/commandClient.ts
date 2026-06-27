@@ -44,6 +44,17 @@ export class CommandTimeoutError extends Error {
   }
 }
 
+/** Thrown when an individual command HTTP request exceeds its timeout. */
+export class CommandRequestTimeoutError extends Error {
+  readonly commandId: string | undefined;
+
+  constructor(message: string, commandId?: string) {
+    super(message);
+    this.name = "CommandRequestTimeoutError";
+    this.commandId = commandId;
+  }
+}
+
 /** Thrown when the server returns a non-OK HTTP status. */
 export class CommandHttpError extends Error {
   readonly statusCode: number;
@@ -71,6 +82,8 @@ export type CommandClientOptions = {
   traceId?: string;
   /** Tenant ID for multi-tenant routing. */
   tenantId?: string;
+  /** Optional external AbortSignal for caller-controlled cancellation. */
+  signal?: AbortSignal;
 };
 
 // ---------------------------------------------------------------------------
@@ -85,20 +98,41 @@ async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit,
   timeoutMs: number,
-): Promise<Response | null> {
+  signal: AbortSignal | undefined,
+  timeoutMessage: string,
+  commandId?: string,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  let abortListener: (() => void) | undefined;
+
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+    } else {
+      const listener = () => controller.abort(signal.reason);
+      signal.addEventListener("abort", listener, { once: true });
+      abortListener = () => signal.removeEventListener("abort", listener);
+    }
+  }
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(input, { ...init, signal: controller.signal });
     return response;
   } catch (err: unknown) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      return null; // timeout
+    if (timedOut) {
+      throw new CommandRequestTimeoutError(timeoutMessage, commandId);
     }
+
     throw err;
   } finally {
     clearTimeout(timer);
+    abortListener?.();
   }
 }
 
@@ -155,7 +189,16 @@ export async function submitCommand(
       body: JSON.stringify(request),
     },
     timeoutMs,
-  );
+    opts.signal,
+    `Command submission timed out after ${timeoutMs}ms`,
+    request.commandId,
+  ).catch((error: unknown) => {
+    if (error instanceof CommandRequestTimeoutError) {
+      return null;
+    }
+
+    throw error;
+  });
 
   // --- Timeout path: fall back to status polling ---
   if (response === null) {
@@ -186,12 +229,17 @@ export async function getCommandStatus(
 ): Promise<CommandStatusResponse> {
   const baseUrl = opts.baseUrl ?? "";
   const headers = buildHeaders(opts);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // Remove content-type for GET
   delete headers["content-type"];
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${baseUrl}/api/commands/${encodeURIComponent(commandId)}`,
     { method: "GET", headers },
+    timeoutMs,
+    opts.signal,
+    `Command status query timed out after ${timeoutMs}ms`,
+    commandId,
   );
 
   if (!response.ok) {

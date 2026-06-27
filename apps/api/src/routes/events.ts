@@ -6,8 +6,11 @@
  * @see docs/dev/outbox-polling-reader.md
  */
 import crypto from "crypto";
-import { SseConnectionManager } from "../outbox/SseConnectionManager.ts";
-import { OutboxRepository } from "../outbox/OutboxRepository.ts";
+import { SseConnectionManager } from "../outbox/SseConnectionManager.js";
+import {
+  OutboxRepository,
+  serializeOutboxPayload,
+} from "../outbox/OutboxRepository.js";
 import { getTracer, getMetrics } from "@erp/observability";
 
 function hashId(id?: string): string {
@@ -91,6 +94,12 @@ export function sseEventsRoute(
         sendSyncRequired() {
           const formatted = `event: SYNC_REQUIRED\ndata: {}\n\n`;
           sendString(formatted);
+          connectionManager.unregister(connectionId);
+          try {
+            controller.close();
+          } catch {
+            // Stream already closed.
+          }
         },
       };
 
@@ -128,7 +137,6 @@ export function sseEventsRoute(
           if (minId !== null && BigInt(lastEventId) < BigInt(minId)) {
             // Retention gap!
             connection.sendSyncRequired();
-            controller.close();
             syncSpan.end();
             return;
           }
@@ -154,6 +162,17 @@ export function sseEventsRoute(
             for (const meta of deliverable) {
               const pRow = payloadMap.get(meta.outboxId);
               if (pRow) {
+                const serialized = serializeOutboxPayload(pRow.payload) ?? "null";
+                const payloadHash = crypto.createHash("sha256").update(serialized).digest("hex");
+
+                if (payloadHash !== meta.payloadHash) {
+                  metrics.increment("erp_outbox_hash_mismatch_total");
+                  console.error(`SECURITY ALERT: Payload hash mismatch for outbox_id ${meta.outboxId}. Replay blocked.`);
+                  connection.sendSyncRequired();
+                  syncSpan.end();
+                  return;
+                }
+
                 connection.send({
                   ...meta,
                   payload: pRow.payload,
@@ -167,7 +186,6 @@ export function sseEventsRoute(
           syncSpan.recordException(err);
           console.error("Error during SSE replay:", err);
           connection.sendSyncRequired();
-          controller.close();
           syncSpan.end();
           return;
         }

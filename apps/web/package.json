@@ -7,7 +7,16 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.smoke.json --pretty false",
-    "build": "tsc -p tsconfig.json",
+    "build": "next build",
+    "dev": "next dev -p ${WEB_PORT:-3000}",
     "test": "node --test test/smoke.test.mjs"
+  },
+  "dependencies": {
+    "next": "^14.2.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17"
   }
 }

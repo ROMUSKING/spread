@@ -51,14 +51,31 @@ export function SpreadsheetGrid({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
+  const editHandledRef = useRef(false);
 
   // Focus input when editing starts
   useEffect(() => {
     if (editingCell && inputRef.current) {
+      editHandledRef.current = false;
       inputRef.current.focus();
       inputRef.current.select();
     }
   }, [editingCell]);
+
+  const finishEditing = (mode: "commit" | "cancel"): void => {
+    if (!editingCell) {
+      return;
+    }
+
+    editHandledRef.current = true;
+
+    if (mode === "commit") {
+      onCellEdit(editingCell.rowId, editingCell.columnId, editingCell.value);
+    }
+
+    setEditingCell(null);
+    tableRef.current?.focus();
+  };
 
   const handleCellClick = (rowId: string, columnId: string, value: string, rowIndex: number, colIndex: number) => {
     setActiveCell({ rowIndex, colIndex });
@@ -73,13 +90,10 @@ export function SpreadsheetGrid({
     if (editingCell) {
       if (e.key === "Enter") {
         e.preventDefault();
-        onCellEdit(editingCell.rowId, editingCell.columnId, editingCell.value);
-        setEditingCell(null);
-        tableRef.current?.focus();
+        finishEditing("commit");
       } else if (e.key === "Escape") {
         e.preventDefault();
-        setEditingCell(null);
-        tableRef.current?.focus();
+        finishEditing("cancel");
       }
       return;
     }
@@ -146,6 +160,7 @@ export function SpreadsheetGrid({
         role="grid"
         aria-label="Spreadsheet Editor"
         tabIndex={0}
+        onKeyDown={(e) => handleKeyDown(e, activeCell.rowIndex, activeCell.colIndex)}
         style={{
           width: "100%",
           borderCollapse: "collapse",
@@ -226,7 +241,6 @@ export function SpreadsheetGrid({
                     role="gridcell"
                     aria-selected={isActive}
                     tabIndex={-1}
-                    onKeyDown={(e) => handleKeyDown(e, rIdx, cIdx)}
                     style={{
                       padding: "10px 16px",
                       textAlign: cIdx === 0 ? "left" : "right",
@@ -247,8 +261,12 @@ export function SpreadsheetGrid({
                         value={editingCell.value}
                         onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                         onBlur={() => {
-                          onCellEdit(editingCell.rowId, editingCell.columnId, editingCell.value);
-                          setEditingCell(null);
+                          if (editHandledRef.current) {
+                            editHandledRef.current = false;
+                            return;
+                          }
+
+                          finishEditing("commit");
                         }}
                         style={{
                           width: "100%",

@@ -92,6 +92,25 @@ export function validateStagingToCommandGate(
     return { eligible: false, reason: "Service account has been revoked" };
   }
 
+  if (
+    payload.tenantId !== connection.tenantId ||
+    payload.tenantId !== serviceAccount.tenantId
+  ) {
+    return { eligible: false, reason: "Tenant binding mismatch between payload, connection, and service account" };
+  }
+
+  if (payload.integrationConnectionId !== connection.integrationConnectionId) {
+    return { eligible: false, reason: "Payload integration connection does not match the staged connection" };
+  }
+
+  if (connection.serviceAccountId !== serviceAccount.serviceAccountId) {
+    return { eligible: false, reason: "Connection service account does not match the staged service account" };
+  }
+
+  if (!isCredentialRefSafe(connection.credentialRef ?? "")) {
+    return { eligible: false, reason: "Connection credential reference is not KMS-safe" };
+  }
+
   const validRotationStates = ["not_required", "current", "rotating"];
   if (!validRotationStates.includes(connection.credentialRotationState)) {
     return { eligible: false, reason: `Invalid credential rotation state: ${connection.credentialRotationState}` };
@@ -124,6 +143,10 @@ export function validateStagingToCommandGate(
 
   if (!serviceAccount.allowedObjectTypes.includes(payload.objectType)) {
     return { eligible: false, reason: `Object type "${payload.objectType}" is not allowed by service account` };
+  }
+
+  if (!connection.allowedObjectTypes.includes(payload.objectType)) {
+    return { eligible: false, reason: `Object type "${payload.objectType}" is not allowed by connection` };
   }
 
   const connectionCeiling = CLASSIFICATION_RANK[connection.dataClassificationMax] ?? 0;

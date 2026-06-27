@@ -19,7 +19,9 @@
     "test": "bash scripts/smoke-package-tests.sh",
     "lint": "pnpm -r --if-present lint",
     "build": "pnpm -r --if-present build",
-    "smoke:package-tests": "bash scripts/smoke-package-tests.sh"
+    "smoke:package-tests": "bash scripts/smoke-package-tests.sh",
+    "migrate": "node --loader ts-node/esm --no-warnings scripts/migrate.ts || tsx scripts/migrate.ts || node -e 'console.log(\"run after pnpm install + tsx or build\")'",
+    "dev": "node --loader ts-node/esm --no-warnings -e 'console.log(\"Start db with: docker compose up -d db && pnpm migrate ; then node apps/api/src/server.ts & (cd apps/web && npm run dev or next dev)\")' || echo 'See README / plan for full dev setup (docker + pnpm install needed)'"
   },
   "devDependencies": {
     "@erp/config": "workspace:*",

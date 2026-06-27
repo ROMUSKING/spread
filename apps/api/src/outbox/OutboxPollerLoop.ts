@@ -14,6 +14,7 @@ export class OutboxPollerLoop {
   private running = false;
   private timeoutId: NodeJS.Timeout | null = null;
   private isPolling = false;
+  private pollWatermark = "0";
 
   private readonly poller: OutboxPoller;
   private readonly connectionManager: SseConnectionManager;
@@ -96,20 +97,17 @@ export class OutboxPollerLoop {
         return;
       }
 
+      const effectivePollWatermark =
+        BigInt(this.pollWatermark) > minWatermark
+          ? this.pollWatermark
+          : String(minWatermark);
+
       const subscriptions = {
         tenantIds,
         workbookIdsByTenant,
       };
 
-      const result = await this.poller.pollOnce(String(minWatermark), subscriptions);
-
-      if (result.syncRequired) {
-        // Broadcast SYNC_REQUIRED to all connections that might have suffered from the gap/budget breach
-        for (const conn of connections) {
-          conn.sendSyncRequired();
-        }
-        return;
-      }
+      const result = await this.poller.pollOnce(effectivePollWatermark, subscriptions);
 
       if (result.events.length > 0) {
         for (const event of result.events) {
@@ -129,6 +127,30 @@ export class OutboxPollerLoop {
             }
           }
         }
+      }
+
+      if (result.syncRequired) {
+        const affectedConnections = connections.filter((conn) => {
+          const matchesTarget = result.syncTargets?.some(
+            (target) =>
+              target.tenantId === conn.tenantId &&
+              (target.workbookId === undefined || target.workbookId === conn.workbookId)
+          ) ?? false;
+
+          const matchesRetentionGap =
+            result.syncMinOutboxId !== undefined &&
+            BigInt(conn.highWatermark || "0") < BigInt(result.syncMinOutboxId);
+
+          return matchesTarget || matchesRetentionGap;
+        });
+
+        for (const conn of affectedConnections) {
+          conn.sendSyncRequired();
+        }
+      }
+
+      if (BigInt(result.nextHighWatermark || "0") > BigInt(this.pollWatermark)) {
+        this.pollWatermark = result.nextHighWatermark;
       }
     } catch (err) {
       console.error("Error in OutboxPollerLoop tick:", err);

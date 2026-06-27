@@ -52,6 +52,14 @@ export function generateIdempotencyKey(
   return `outbox:${tenantId}:${commandId}:${commandEventSeq}:${eventType}`;
 }
 
+export function serializeOutboxPayload(payload: unknown): string | null {
+  if (payload === undefined) {
+    return null;
+  }
+
+  return JSON.stringify(payload);
+}
+
 /**
  * Outbox repository for PostgreSQL operations.
  *
@@ -119,8 +127,8 @@ export class OutboxRepository {
       params.targetPlanes,
       params.schemaVersion,
       params.dataSchema,
-      params.payloadContentType ?? "application/json",
-      params.payload ? JSON.stringify(params.payload) : null,
+      params.payloadContentType,
+      serializeOutboxPayload(params.payload),
       params.payloadRef ?? null,
       params.payloadHash,
       params.payloadSizeBytes,

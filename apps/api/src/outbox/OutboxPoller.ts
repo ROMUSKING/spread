@@ -9,7 +9,7 @@
 import crypto from "crypto";
 import type { OutboxEnvelope } from "@erp/contracts/events";
 import type { MetricsLike } from "@erp/observability/metrics";
-import type { OutboxRepository } from "./OutboxRepository";
+import { serializeOutboxPayload, type OutboxRepository } from "./OutboxRepository";
 import { getTracer } from "@erp/observability";
 
 function hashId(id?: string): string {
@@ -25,6 +25,19 @@ export type LocalSubscriptionIndex = {
 export type OutboxPollerOptions = {
   maxEventsPerPoll: number;
   maxBytesPerPoll: number; // e.g. 2 MiB budget
+};
+
+export type OutboxSyncTarget = {
+  tenantId: string;
+  workbookId?: string | undefined;
+};
+
+export type OutboxPollResult = {
+  nextHighWatermark: string;
+  events: OutboxEnvelope[];
+  syncRequired: boolean;
+  syncTargets?: OutboxSyncTarget[];
+  syncMinOutboxId?: string;
 };
 
 export class OutboxPoller {
@@ -51,11 +64,7 @@ export class OutboxPoller {
   async pollOnce(
     highWatermark: string,
     subscriptions: LocalSubscriptionIndex
-  ): Promise<{
-    nextHighWatermark: string;
-    events: OutboxEnvelope[];
-    syncRequired: boolean;
-  }> {
+  ): Promise<OutboxPollResult> {
     const startTime = Date.now();
     const tenantIds = [...subscriptions.tenantIds];
     if (tenantIds.length === 0) {
@@ -98,6 +107,7 @@ export class OutboxPoller {
         nextHighWatermark: highWatermark,
         events: [],
         syncRequired: true,
+        syncMinOutboxId: minOutboxId,
       };
     }
 
@@ -224,6 +234,14 @@ export class OutboxPoller {
         nextHighWatermark: nextWatermark,
         events: [],
         syncRequired: true,
+        ...(envelopes[deliverableMetadata.length]
+          ? {
+              syncTargets: [{
+                tenantId: envelopes[deliverableMetadata.length]!.tenantId,
+                workbookId: envelopes[deliverableMetadata.length]!.workbookId,
+              }],
+            }
+          : {}),
       };
     }
 
@@ -274,30 +292,26 @@ export class OutboxPoller {
       }
 
       // Hash verification
-      const serialized = JSON.stringify(payloadRow.payload ?? {});
+      const serialized = serializeOutboxPayload(payloadRow.payload) ?? "null";
       const calculatedHash = crypto.createHash("sha256").update(serialized).digest("hex");
 
       if (calculatedHash !== meta.payloadHash) {
         this.metrics.increment("erp_outbox_hash_mismatch_total");
         console.error(`SECURITY ALERT: Payload hash mismatch for outbox_id ${meta.outboxId}. Delivery blocked.`);
-        
-        // Block delivery and roll back watermark to before this compromised event
-        const index = deliverableMetadata.indexOf(meta);
-        if (index > 0) {
-          nextWatermark = deliverableMetadata[index - 1]!.outboxId;
-        } else {
-          nextWatermark = highWatermark;
-        }
 
         pollSpan.setAttribute("events_seen", envelopes.length);
         pollSpan.setAttribute("events_delivered", fullEvents.length);
         pollSpan.setAttribute("bytes_fetched", accumulatedBytes);
         pollSpan.end();
-        
+
         return {
-          nextHighWatermark: nextWatermark,
+          nextHighWatermark: meta.outboxId,
           events: fullEvents,
-          syncRequired: false,
+          syncRequired: true,
+          syncTargets: [{
+            tenantId: meta.tenantId,
+            workbookId: meta.workbookId,
+          }],
         };
       }
 

@@ -36,8 +36,10 @@ export function useSseSubscription(
   const [lastEventId, setLastEventId] = useState<string | null>(null);
 
   const lastEventIdRef = useRef<string | null>(null);
+  const baseWatermarkRef = useRef<string | null>(null);
   const reconnectAttemptRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSyncRequiredRef = useRef(onSyncRequired);
 
   // Keep callback ref updated to avoid re-triggering effect
@@ -50,6 +52,10 @@ export function useSseSubscription(
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -57,13 +63,33 @@ export function useSseSubscription(
     const headers: Record<string, string> = {
       Accept: "text/event-stream",
     };
-    if (lastEventIdRef.current) {
-      headers["Last-Event-ID"] = lastEventIdRef.current;
+    const resumeWatermark = lastEventIdRef.current ?? baseWatermarkRef.current;
+    if (resumeWatermark) {
+      headers["Last-Event-ID"] = resumeWatermark;
     }
 
     const url = `/api/events?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`;
 
     setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
+
+    const scheduleReconnect = () => {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      setConnectionState("disconnected");
+
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+      reconnectAttemptRef.current += 1;
+
+      reconnectTimeoutRef.current = setTimeout(() => {
+        if (abortController.signal.aborted || abortControllerRef.current !== abortController) {
+          return;
+        }
+
+        connect();
+      }, delay);
+    };
 
     fetch(url, {
       headers,
@@ -88,7 +114,10 @@ export function useSseSubscription(
 
         while (true) {
           const { value, done } = await reader.read();
-          if (done) break;
+          if (done) {
+            scheduleReconnect();
+            return;
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const parts = buffer.split("\n\n");
@@ -127,7 +156,16 @@ export function useSseSubscription(
             }
 
             if (eventType === "connected") {
-              // Parse base high watermark metadata if present
+              try {
+                const metadata = JSON.parse(data) as { baseWatermark?: unknown };
+                const baseWatermark = metadata.baseWatermark;
+                if (typeof baseWatermark === "string" && baseWatermark) {
+                  baseWatermarkRef.current = baseWatermark;
+                  setLastEventId((current) => current ?? baseWatermark);
+                }
+              } catch (e) {
+                console.error("Failed to parse SSE connection metadata:", e);
+              }
               continue;
             }
 
@@ -154,16 +192,7 @@ export function useSseSubscription(
         }
 
         console.error("SSE connection error:", err);
-        setConnectionState("disconnected");
-
-        // Schedule reconnection with exponential backoff: 1s, 2s, 4s, up to 30s
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
-        reconnectAttemptRef.current += 1;
-
-        setTimeout(() => {
-          if (abortController.signal.aborted) return;
-          connect();
-        }, delay);
+        scheduleReconnect();
       });
   }, [tenantId, workbookId]);
 
@@ -171,6 +200,9 @@ export function useSseSubscription(
     connect();
 
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }

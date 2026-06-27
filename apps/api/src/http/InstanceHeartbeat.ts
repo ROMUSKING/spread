@@ -49,6 +49,16 @@ export class InstanceHeartbeat {
   private readonly _instanceId: string;
   private _intervalHandle: ReturnType<typeof setInterval> | null = null;
 
+  private handleBeatError(error: unknown): void {
+    console.error(`InstanceHeartbeat beat failed for instance ${this._instanceId}:`, error);
+  }
+
+  private scheduleBeat(): void {
+    void this.beat().catch((error: unknown) => {
+      this.handleBeatError(error);
+    });
+  }
+
   /**
    * @param db - Queryable database connection (from @erp/db/transaction)
    * @param instanceId - Unique identifier for this application instance
@@ -73,9 +83,9 @@ export class InstanceHeartbeat {
     }
 
     // Fire an immediate heartbeat, then repeat on interval
-    void this.beat();
+    this.scheduleBeat();
     this._intervalHandle = setInterval(() => {
-      void this.beat();
+      this.scheduleBeat();
     }, intervalMs);
 
     // Allow the Node.js process to exit even if the interval is running
