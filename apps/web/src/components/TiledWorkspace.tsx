@@ -9,6 +9,7 @@ export interface TileState {
   type: "grid" | "detail" | "explorer" | "graph";
   workbookId: string;
   selectedRowId?: string | null;
+  gridArea?: string;
 }
 
 const TILE_VIEW_LABELS: Record<TileState["type"], string> = {
@@ -17,6 +18,50 @@ const TILE_VIEW_LABELS: Record<TileState["type"], string> = {
   graph: "Relations",
   detail: "Detail",
 };
+
+interface ViewPreset {
+  name: string;
+  tiles: TileState[];
+  layout: "row" | "column";
+}
+
+const VIEW_PRESETS: ViewPreset[] = [
+  {
+    name: "Master Data",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-md-1", type: "explorer", workbookId: "00000000-0000-0000-0000-000000000021" },
+      { id: "tile-preset-md-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000021" },
+      { id: "tile-preset-md-3", type: "graph", workbookId: "00000000-0000-0000-0000-000000000021" },
+    ]
+  },
+  {
+    name: "Sales Processing (OTC)",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-so-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000015", gridArea: "1 / 1 / 2 / 2" },
+      { id: "tile-preset-so-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000014", gridArea: "2 / 1 / 3 / 2" },
+      { id: "tile-preset-so-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000015", gridArea: "1 / 2 / 3 / 3" },
+    ]
+  },
+  {
+    name: "Warehouse Ops",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-wh-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000014" },
+      { id: "tile-preset-wh-2", type: "graph", workbookId: "00000000-0000-0000-0000-000000000014" },
+    ]
+  },
+  {
+    name: "Procurement (PO)",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-po-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000016" },
+      { id: "tile-preset-po-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000025" },
+      { id: "tile-preset-po-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000016" },
+    ]
+  }
+];
 
 interface TiledWorkspaceProps {
   nodes: WorkspaceNode[];
@@ -61,6 +106,15 @@ export function TiledWorkspace({
 
   const [layoutDirection, setLayoutDirection] = useState<"row" | "column">("row");
 
+  const applyPreset = (preset: ViewPreset) => {
+    const newTiles = preset.tiles.map((t, idx) => ({
+      ...t,
+      id: `tile-${Date.now()}-${idx}`
+    }));
+    setTiles(newTiles);
+    setLayoutDirection(preset.layout);
+  };
+
   const splitTile = (index: number) => {
     const tileToSplit = tiles[index];
     if (!tileToSplit) return;
@@ -98,10 +152,33 @@ export function TiledWorkspace({
 
   return (
     <div className="workspace">
-      <div className="workspace-toolbar">
-        <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text-secondary)" }}>
-          {tiles.length} tile{tiles.length === 1 ? "" : "s"}
-        </span>
+      <div className="workspace-toolbar" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-sm)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+          <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text-secondary)" }}>
+            {tiles.length} tile{tiles.length === 1 ? "" : "s"}
+          </span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)" }}>
+            <label style={{ fontSize: "var(--font-size-sm)", color: "var(--color-text-muted)", fontWeight: 500 }}>Preset Views:</label>
+            <select
+              className="select select--sm"
+              onChange={(e) => {
+                const preset = VIEW_PRESETS.find(p => p.name === e.target.value);
+                if (preset) applyPreset(preset);
+              }}
+              defaultValue=""
+              style={{ padding: "4px 8px", fontSize: "12px" }}
+            >
+              <option value="" disabled>Select Preset...</option>
+              {VIEW_PRESETS.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: "var(--space-sm)" }}>
           <button
             type="button"
@@ -120,14 +197,35 @@ export function TiledWorkspace({
         </div>
       </div>
 
-      <div className={`workspace-tiles workspace-tiles--${layoutDirection}`}>
-        {tiles.map((tile, idx) => {
-          const rows = workbookRows[tile.workbookId] || [];
-          const columns = workbookColumns[tile.workbookId] || [];
-          const selectedRow = rows.find((r) => r.rowId === tile.selectedRowId) || null;
+      {(() => {
+        const hasGridAreas = tiles.some(t => t.gridArea);
+        const containerStyle: React.CSSProperties = hasGridAreas
+          ? {
+              display: "grid",
+              gridTemplateColumns: "1.2fr 1fr",
+              gridTemplateRows: "1fr 1fr",
+              gap: "var(--space-md)",
+              height: "100%",
+              width: "100%"
+            }
+          : {};
 
-          return (
-            <div key={tile.id} className="tile">
+        return (
+          <div
+            className={`workspace-tiles workspace-tiles--${layoutDirection}`}
+            style={containerStyle}
+          >
+            {tiles.map((tile, idx) => {
+              const rows = workbookRows[tile.workbookId] || [];
+              const columns = workbookColumns[tile.workbookId] || [];
+              const selectedRow = rows.find((r) => r.rowId === tile.selectedRowId) || null;
+
+              return (
+                <div
+                  key={tile.id}
+                  className="tile"
+                  style={tile.gridArea ? { gridArea: tile.gridArea, display: "flex", flexDirection: "column", height: "100%" } : {}}
+                >
               <div className="tile-toolbar">
                 <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
                   <select
@@ -254,6 +352,8 @@ export function TiledWorkspace({
           );
         })}
       </div>
+    );
+  })()}
     </div>
   );
 }

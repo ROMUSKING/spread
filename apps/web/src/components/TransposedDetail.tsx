@@ -89,9 +89,67 @@ export function TransposedDetail({
           const label = statusLabel(cmdState?.state, cmdState?.error);
 
           return (
-            <div key={col.columnId} className={`detail-field ${fieldStatusClass(cmdState?.state)}`}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="detail-field-label">{col.label}</span>
+            <div
+              key={col.columnId}
+              className={`detail-field ${fieldStatusClass(cmdState?.state)}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-md)",
+                padding: "var(--space-xs) var(--space-sm)",
+                borderRadius: "var(--radius-sm)",
+                borderBottom: "1px solid var(--color-border-subtle, rgba(0,0,0,0.03))"
+              }}
+            >
+              <div style={{ width: "140px", flexShrink: 0, display: "flex", alignItems: "center" }}>
+                <span className="detail-field-label" style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>{col.label}</span>
+              </div>
+
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                {isFieldEditing ? (
+                  <input
+                    type="text"
+                    className="input input--sm"
+                    value={displayVal}
+                    onChange={(e) => handleFieldChange(col.columnId, e.target.value)}
+                    onBlur={() => handleFieldCommit(col.columnId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleFieldCommit(col.columnId);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setEditedValues((prev) => ({ ...prev, [col.columnId]: row.values[col.columnId] || "" }));
+                        setEditingField(null);
+                      }
+                    }}
+                    autoFocus
+                    style={{ width: "100%" }}
+                  />
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="detail-field-value"
+                    onClick={() => setEditingField(col.columnId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setEditingField(col.columnId);
+                      }
+                    }}
+                    style={{
+                      padding: "var(--space-xs) 0",
+                      cursor: "text",
+                      minHeight: 24,
+                      color: "var(--color-text)",
+                      flex: 1
+                    }}
+                  >
+                    {displayVal || <span style={{ color: "var(--color-text-muted)", fontStyle: "italic" }}>Empty</span>}
+                  </div>
+                )}
+
                 {label && (
                   <span
                     className={`status-badge ${
@@ -101,6 +159,7 @@ export function TransposedDetail({
                         ? "status-badge--ambiguous"
                         : "status-badge--pending"
                     }`}
+                    style={{ flexShrink: 0 }}
                   >
                     {cmdState?.state === "pending" && <span className="status-dot status-dot--pending" />}
                     {cmdState?.state === "ambiguous_requires_refresh" && (
@@ -110,48 +169,6 @@ export function TransposedDetail({
                   </span>
                 )}
               </div>
-
-              {isFieldEditing ? (
-                <input
-                  type="text"
-                  className="input input--sm"
-                  value={displayVal}
-                  onChange={(e) => handleFieldChange(col.columnId, e.target.value)}
-                  onBlur={() => handleFieldCommit(col.columnId)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleFieldCommit(col.columnId);
-                    } else if (e.key === "Escape") {
-                      e.preventDefault();
-                      setEditedValues((prev) => ({ ...prev, [col.columnId]: row.values[col.columnId] || "" }));
-                      setEditingField(null);
-                    }
-                  }}
-                  autoFocus
-                />
-              ) : (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="detail-field-value"
-                  onClick={() => setEditingField(col.columnId)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setEditingField(col.columnId);
-                    }
-                  }}
-                  style={{
-                    padding: "var(--space-xs) 0",
-                    cursor: "text",
-                    minHeight: 24,
-                    color: "var(--color-text)",
-                  }}
-                >
-                  {displayVal || <span style={{ color: "var(--color-text-muted)" }}>Empty</span>}
-                </div>
-              )}
             </div>
           );
         })}
