@@ -1,6 +1,6 @@
-# AI Coding Agent Instructions — Spreadsheet-Native ERP v0.17.0
+# AI Coding Agent Instructions — Spreadsheet-Native ERP v0.17.1
 
-**Version:** 0.17.0  
+**Version:** 0.17.1  
 **Status:** Active repository-smoke implementation baseline  
 **First read:** `docs/snapshot-v0.17.0.md`
 

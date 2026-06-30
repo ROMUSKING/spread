@@ -1,4 +1,4 @@
-version: 0.17.0
+version: 0.17.1
 last_reviewed: '2026-06-26'
 sloReference: repo://docs/slo-baseline.yml
 # PR1 from sme-ecommerce-domain-model-and-business-logic-spec.md:

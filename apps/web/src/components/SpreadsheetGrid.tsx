@@ -66,6 +66,9 @@ export function SpreadsheetGrid({
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
   const [draftWidths, setDraftWidths] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectionStart, setSelectionStart] = useState<{ rowIndex: number; colIndex: number } | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<{ rowIndex: number; colIndex: number } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const newColInputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +105,57 @@ export function SpreadsheetGrid({
       newColInputRef.current.focus();
     }
   }, [addingColumn]);
+
+  const handleCellMouseDown = (rowIndex: number, colIndex: number, e: React.MouseEvent) => {
+    if (e.button !== 0 || editingCell || resizingColumn) return;
+    setIsSelecting(true);
+    setSelectionStart({ rowIndex, colIndex });
+    setSelectionEnd({ rowIndex, colIndex });
+    setActiveCell({ rowIndex, colIndex });
+    setSelectedRow(null);
+  };
+
+  const handleCellMouseEnter = (rowIndex: number, colIndex: number) => {
+    if (!isSelecting) return;
+    setSelectionEnd({ rowIndex, colIndex });
+  };
+
+  useEffect(() => {
+    const handleMouseUpGlobal = () => {
+      setIsSelecting(false);
+    };
+    window.addEventListener("mouseup", handleMouseUpGlobal);
+    return () => window.removeEventListener("mouseup", handleMouseUpGlobal);
+  }, [isSelecting]);
+
+  const isCellSelected = useCallback((rowIndex: number, colIndex: number) => {
+    if (!selectionStart || !selectionEnd) {
+      return activeCell.rowIndex === rowIndex && activeCell.colIndex === colIndex;
+    }
+    const minRow = Math.min(selectionStart.rowIndex, selectionEnd.rowIndex);
+    const maxRow = Math.max(selectionStart.rowIndex, selectionEnd.rowIndex);
+    const minCol = Math.min(selectionStart.colIndex, selectionEnd.colIndex);
+    const maxCol = Math.max(selectionStart.colIndex, selectionEnd.colIndex);
+    return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol;
+  }, [selectionStart, selectionEnd, activeCell]);
+
+  const getCellRangeClasses = useCallback((rowIndex: number, colIndex: number) => {
+    if (!selectionStart || !selectionEnd) return "";
+    const minRow = Math.min(selectionStart.rowIndex, selectionEnd.rowIndex);
+    const maxRow = Math.max(selectionStart.rowIndex, selectionEnd.rowIndex);
+    const minCol = Math.min(selectionStart.colIndex, selectionEnd.colIndex);
+    const maxCol = Math.max(selectionStart.colIndex, selectionEnd.colIndex);
+
+    if (rowIndex < minRow || rowIndex > maxRow || colIndex < minCol || colIndex > maxCol) return "";
+
+    const classes = ["spreadsheet-cell--in-range"];
+    if (rowIndex === minRow) classes.push("spreadsheet-cell--range-top");
+    if (rowIndex === maxRow) classes.push("spreadsheet-cell--range-bottom");
+    if (colIndex === minCol) classes.push("spreadsheet-cell--range-left");
+    if (colIndex === maxCol) classes.push("spreadsheet-cell--range-right");
+
+    return classes.join(" ");
+  }, [selectionStart, selectionEnd]);
 
   const finishResize = useCallback(() => {
     const start = resizeStartRef.current;
@@ -203,6 +257,83 @@ export function SpreadsheetGrid({
     },
     [editingCell, onCellEdit, onCreateRow]
   );
+
+  useEffect(() => {
+    const handleCopy = (e: ClipboardEvent) => {
+      if (editingCell || document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") {
+        return;
+      }
+      
+      const start = selectionStart || activeCell;
+      const end = selectionEnd || activeCell;
+      const minRow = Math.min(start.rowIndex, end.rowIndex);
+      const maxRow = Math.max(start.rowIndex, end.rowIndex);
+      const minCol = Math.min(start.colIndex, end.colIndex);
+      const maxCol = Math.max(start.colIndex, end.colIndex);
+
+      let lines: string[] = [];
+      for (let r = minRow; r <= maxRow; r++) {
+        const row = getRowAt(r);
+        if (!row) continue;
+        const lineCells: string[] = [];
+        for (let c = minCol; c <= maxCol; c++) {
+          const col = columns[c];
+          if (!col) continue;
+          lineCells.push(row.values[col.columnId] || "");
+        }
+        lines.push(lineCells.join("\t"));
+      }
+
+      const tsvText = lines.join("\n");
+      e.clipboardData?.setData("text/plain", tsvText);
+      e.preventDefault();
+    };
+
+    const handlePaste = (e: ClipboardEvent) => {
+      if (editingCell || document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") {
+        return;
+      }
+
+      const rawText = e.clipboardData?.getData("text/plain") || "";
+      if (!rawText) return;
+
+      const lines = rawText.split(/\r?\n/);
+      if (lines.length === 0) return;
+
+      const start = selectionStart || activeCell;
+      const baseRow = start.rowIndex;
+      const baseCol = start.colIndex;
+
+      e.preventDefault();
+
+      for (let rIdx = 0; rIdx < lines.length; rIdx++) {
+        const line = lines[rIdx];
+        if (line === undefined) continue;
+        if (!line && rIdx === lines.length - 1) continue;
+        const cells = line.split("\t");
+        const targetRowIdx = baseRow + rIdx;
+        const row = getRowAt(targetRowIdx);
+        if (!row) continue;
+
+        for (let cIdx = 0; cIdx < cells.length; cIdx++) {
+          const val = cells[cIdx];
+          if (val === undefined) continue;
+          const targetColIdx = baseCol + cIdx;
+          const col = columns[targetColIdx];
+          if (!col) continue;
+          
+          onCellEdit(row.rowId, col.columnId, val);
+        }
+      }
+    };
+
+    document.addEventListener("copy", handleCopy);
+    document.addEventListener("paste", handlePaste);
+    return () => {
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("paste", handlePaste);
+    };
+  }, [selectionStart, selectionEnd, activeCell, editingCell, columns, getRowAt, onCellEdit]);
 
   const enterEditMode = useCallback(
     (rowIndex: number, colIndex: number, initialValue?: string) => {
@@ -589,13 +720,15 @@ export function SpreadsheetGrid({
                         ? "Refresh required"
                         : "";
 
+                    const rangeClasses = getCellRangeClasses(rIdx, cIdx);
+
                     return (
                       <td
                         key={col.columnId}
                         role="gridcell"
                         aria-selected={isActive}
                         tabIndex={-1}
-                        className={`spreadsheet-cell ${statusClass} ${isActive && !editingCell ? "spreadsheet-cell--active" : ""}`}
+                        className={`spreadsheet-cell ${statusClass} ${isActive && !editingCell ? "spreadsheet-cell--active" : ""} ${rangeClasses}`}
                         style={{
                           minWidth: width,
                           width,
@@ -603,6 +736,8 @@ export function SpreadsheetGrid({
                           color: isEmptyRow && !isEditing ? "var(--color-text-muted)" : "var(--color-text)",
                           fontStyle: isEmptyRow && !isEditing ? "italic" : "normal",
                         }}
+                        onMouseDown={(e) => handleCellMouseDown(rIdx, cIdx, e)}
+                        onMouseEnter={() => handleCellMouseEnter(rIdx, cIdx)}
                         onClick={() => handleCellClick(rIdx, cIdx)}
                         onDoubleClick={() => handleCellDoubleClick(rIdx, cIdx)}
                         title={tooltipText}

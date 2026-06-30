@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.17.0"
+VERSION="0.17.1"
 SPEC="spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md"
 WAIVER_ID=""
 if [[ "${1:-}" == "--waiver" ]]; then
@@ -49,7 +49,7 @@ python3 - <<'PYVALID'
 from pathlib import Path
 import re, sys, yaml, json
 
-VERSION='0.17.0'
+VERSION='0.17.1'
 SPEC=Path('spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md')
 
 class UniqueKeyLoader(yaml.SafeLoader): pass

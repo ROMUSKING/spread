@@ -27,6 +27,7 @@ import {
 import {
   InventoryAdjustHandler,
   ProductCreateHandler,
+  InventoryReturnReceiptHandler,
 } from './commands/handlers/InventoryHandlers';
 import {
   PurchaseOrderCreateHandler,
@@ -37,6 +38,7 @@ import {
   SalesOrderConfirmHandler,
   SalesOrderCreateHandler,
   OrderFulfillShipHandler,
+  PaymentRecordHandler,
 } from './commands/handlers/SalesHandlers';
 import {
   ProductTemplateCreateHandler,
@@ -206,10 +208,12 @@ export async function startApi(): Promise<void> {
   // All go through CommandProcessor tx + ledger + outbox.
   handlers.set('inventory.adjust', new InventoryAdjustHandler());
   handlers.set('product.create', new ProductCreateHandler());
+  handlers.set('inventory.returnReceipt', new InventoryReturnReceiptHandler());
   handlers.set('salesOrder.create', new SalesOrderCreateHandler());
   handlers.set('salesOrder.confirm', new SalesOrderConfirmHandler());
   handlers.set('fulfillment.allocate', new FulfillmentAllocateHandler());
   handlers.set('order.fulfillShip', new OrderFulfillShipHandler());
+  handlers.set('payment.record', new PaymentRecordHandler());
   handlers.set('purchaseOrder.create', new PurchaseOrderCreateHandler());
   handlers.set('purchaseOrder.receive', new PurchaseOrderReceiveHandler());
   // Extended master data handlers

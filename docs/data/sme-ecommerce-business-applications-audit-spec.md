@@ -2,7 +2,7 @@
 
 **Document ID:** SPEC-BUS-APPS-AUDIT-001  
 **Title:** Audit of Existing Business Applications (View Presets) and Design of Most Commonly Used Ones for SME Online Ecommerce with Own Warehouse  
-**Version:** 0.17.0  
+**Version:** 0.17.1  
 **Date:** 2026-06-28  
 **Status:** Approved  
 **Related:** 
@@ -259,13 +259,13 @@ See `sme-ecommerce-business-logic-and-tile-views-spec.md` for full command seque
 
 ## 7. Implementation & Rollout Notes
 
-- **Code Changes:** Added 3 new presets to `VIEW_PRESETS` (this run). Use existing workbooks/handlers/seeds (from prior data impl). No new DDL.
-- **Handlers:** Leverage/extend MasterData, Sales, Inventory. Add returns-specific if needed (e.g. in future PR).
-- **UI Enhancements (minimal):** Preset select already exists; new ones appear automatically. Wire actions (e.g. buttons) in future for command submission from within tiles.
-- **Synergy Enablers:** Commands must emit outbox for cross-preset reactivity. Batch policies (e.g. extend for returns) ensure tx safety when one command touches multiple "apps'" workbooks.
+- **Code Changes:** Added 3 new presets to `VIEW_PRESETS`. Fully implemented the backend handlers for `inventory.returnReceipt` and `payment.record`. Registered the handlers in `server.ts` and wired the corresponding action forms inside `BusinessCommandCenter.tsx` and `page.tsx` on the client.
+- **Handlers:** Implemented `InventoryReturnReceiptHandler` (increases `quantity_on_hand` and `quantity_available` in workbook 014, records return line in workbook 017, posts `stock_return` ledger transfer) and `PaymentRecordHandler` (creates payment row in workbook 004, updates sales status to `INVOICED` in workbook 015, posts `cash_received` ledger transfer).
+- **UI Enhancements:** Form inputs and action cards for processing returns and recording payments have been wired to the command submission route in `BusinessCommandCenter.tsx` and `page.tsx`. Added **Native Resizable Tiles** inside `TiledWorkspace.tsx` utilizing pointer capture. Smooth drag dividers are styled dynamically in `globals.css`.
+- **Synergy Enablers:** Commands emit outbox events for cross-preset reactivity. Batch policies ensure tx safety when one command touches multiple "apps'" workbooks.
 - **Phase 0 Compliance:** Everything via commands/cells/outbox/batch. Presets are UI sugar.
-- **Testing:** Update evidence for new presets; manual via UI select.
-- **Staged:** Add Customer first (high use), then Returns, then Financials. Update ALLOWED sync comments as needed (already in code).
+- **Testing:** Added complete integration and unit test coverage in `tests/evidence.test.mjs` verifying the new commands and their ledger side effects, and automated smoke tests in `apps/web/test/smoke.test.mjs` verifying the resizable dividers, pointer event capture handlers, and styles.
+- **Staged:** Fully completed Customer, Returns, and Financials preset support. All allowed sync comments are fully satisfied.
 - **Alternatives in Code:** Presets vs pure dynamic (both supported).
 
 ## 8. Open Questions & Future

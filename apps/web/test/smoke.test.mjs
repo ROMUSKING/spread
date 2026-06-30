@@ -28,7 +28,7 @@ test("@erp/web package metadata is coherent", () => {
   assert.equal(pkg.name, "@erp/web");
   assert.equal(pkg.private, true);
   assert.equal(pkg.type, "module");
-  assert.equal(pkg.version, "0.17.0");
+  assert.equal(pkg.version, "0.17.1");
 });
 
 test("@erp/web required bootstrap source stub exists", () => {
@@ -264,4 +264,45 @@ test("preferences bootstrap script is inlined in layout", () => {
   assert.match(layout, /dangerouslySetInnerHTML/);
   const script = buildPreferencesBootstrapScript();
   assert.match(script, /spread-erp-ui-preferences/);
+});
+
+test("@erp/web resizable dividers are implemented in TiledWorkspace", () => {
+  const tiled = fs.readFileSync(path.join(cwd, "src/components/TiledWorkspace.tsx"), "utf8");
+  assert.match(tiled, /tile-divider/);
+  assert.match(tiled, /handlePointerDown/);
+  assert.match(tiled, /setPointerCapture/);
+  assert.match(tiled, /releasePointerCapture/);
+});
+
+test("@erp/web resizer styles exist in globals.css", () => {
+  const css = fs.readFileSync(path.join(cwd, "src/styles/globals.css"), "utf8");
+  assert.match(css, /\.tile-divider/);
+  assert.match(css, /\.tile-divider--row/);
+  assert.match(css, /\.tile-divider--column/);
+});
+
+test("@erp/web range selection is implemented in SpreadsheetGrid", () => {
+  const grid = fs.readFileSync(path.join(cwd, "src/components/SpreadsheetGrid.tsx"), "utf8");
+  assert.match(grid, /selectionStart/);
+  assert.match(grid, /selectionEnd/);
+  assert.match(grid, /handleCellMouseDown/);
+  assert.match(grid, /handleCellMouseEnter/);
+  assert.match(grid, /getCellRangeClasses/);
+});
+
+test("@erp/web clipboard copy/paste is registered in SpreadsheetGrid", () => {
+  const grid = fs.readFileSync(path.join(cwd, "src/components/SpreadsheetGrid.tsx"), "utf8");
+  assert.match(grid, /document\.addEventListener\("copy"/);
+  assert.match(grid, /document\.addEventListener\("paste"/);
+  assert.match(grid, /e\.clipboardData/);
+  assert.match(grid, /onCellEdit/);
+});
+
+test("@erp/web range selection styles exist in globals.css", () => {
+  const css = fs.readFileSync(path.join(cwd, "src/styles/globals.css"), "utf8");
+  assert.match(css, /\.spreadsheet-cell--in-range/);
+  assert.match(css, /\.spreadsheet-cell--range-top/);
+  assert.match(css, /\.spreadsheet-cell--range-bottom/);
+  assert.match(css, /\.spreadsheet-cell--range-left/);
+  assert.match(css, /\.spreadsheet-cell--range-right/);
 });

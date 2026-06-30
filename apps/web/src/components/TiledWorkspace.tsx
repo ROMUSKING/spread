@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import {
   BusinessCommandCenter,
   type BusinessActionStatusMap,
@@ -10,6 +10,8 @@ import {
   type PurchaseOrderReceiveInput,
   type SalesOrderConfirmInput,
   type SalesOrderCreateInput,
+  type InventoryReturnReceiptInput,
+  type PaymentRecordInput,
 } from "./BusinessCommandCenter";
 import { SpreadsheetGrid, type GridRow, type GridColumn, type CommandState } from "./SpreadsheetGrid";
 import { ExplorerPanel, type WorkspaceNode, type WorkspaceEdge } from "./ExplorerPanel";
@@ -136,6 +138,8 @@ interface TiledWorkspaceProps {
   onCreatePurchaseOrder: (input: PurchaseOrderCreateInput) => Promise<boolean>;
   onReceivePurchaseOrder: (input: PurchaseOrderReceiveInput) => Promise<boolean>;
   onCreateParty: (input: PartyCreateInput) => Promise<boolean>;
+  onReceiveReturn: (input: InventoryReturnReceiptInput) => Promise<boolean>;
+  onRecordPayment: (input: PaymentRecordInput) => Promise<boolean>;
 }
 
 export function TiledWorkspace({
@@ -163,6 +167,8 @@ export function TiledWorkspace({
   onCreatePurchaseOrder,
   onReceivePurchaseOrder,
   onCreateParty,
+  onReceiveReturn,
+  onRecordPayment,
 }: TiledWorkspaceProps) {
   const [tiles, setTiles] = useState<TileState[]>([
     { id: "tile-1", type: "explorer", workbookId: "00000000-0000-0000-0000-000000000002" },
@@ -171,6 +177,57 @@ export function TiledWorkspace({
   ]);
 
   const [layoutDirection, setLayoutDirection] = useState<"row" | "column">("row");
+  const [tileSizes, setTileSizes] = useState<number[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setTileSizes(new Array(tiles.length).fill(100 / tiles.length));
+  }, [tiles.length]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>, idx: number) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const currentSizes = tileSizes.length === tiles.length ? tileSizes : new Array(tiles.length).fill(100 / tiles.length);
+    const startSizeL = currentSizes[idx];
+    const startSizeR = currentSizes[idx + 1];
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const containerSize = layoutDirection === "row" ? rect.width : rect.height;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const delta = layoutDirection === "row" 
+        ? moveEvent.clientX - startX 
+        : moveEvent.clientY - startY;
+      const deltaPercent = (delta / containerSize) * 100;
+      
+      setTileSizes((prev) => {
+        const current = prev.length === tiles.length ? prev : new Array(tiles.length).fill(100 / tiles.length);
+        const next = [...current];
+        const nextL = Math.max(10, startSizeL + deltaPercent);
+        const nextR = Math.max(10, startSizeR - deltaPercent);
+        const total = startSizeL + startSizeR;
+        const diff = total - (nextL + nextR);
+        next[idx] = nextL + diff / 2;
+        next[idx + 1] = nextR + diff / 2;
+        return next;
+      });
+    };
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      try {
+        e.currentTarget.releasePointerCapture(upEvent.pointerId);
+      } catch (err) {
+        // ignore
+      }
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+  };
 
   const applyPreset = (preset: ViewPreset) => {
     const newTiles = preset.tiles.map((t, idx) => ({
@@ -276,8 +333,11 @@ export function TiledWorkspace({
             }
           : {};
 
+        const activeSizes = tileSizes.length === tiles.length ? tileSizes : new Array(tiles.length).fill(100 / tiles.length);
+
         return (
           <div
+            ref={containerRef}
             className={`workspace-tiles workspace-tiles--${layoutDirection}`}
             style={containerStyle}
           >
@@ -286,155 +346,185 @@ export function TiledWorkspace({
               const columns = workbookColumns[tile.workbookId] || [];
               const selectedRow = rows.find((r) => r.rowId === tile.selectedRowId) || null;
 
+              const tileStyle: React.CSSProperties = tile.gridArea
+                ? { gridArea: tile.gridArea, display: "flex", flexDirection: "column", height: "100%" }
+                : {
+                    flex: `${activeSizes[idx]} 1 0%`,
+                    display: "flex",
+                    flexDirection: "column",
+                    height: "100%",
+                    minWidth: layoutDirection === "row" ? "150px" : "auto",
+                    minHeight: layoutDirection === "column" ? "150px" : "auto",
+                  };
+
               return (
-                <div
-                  key={tile.id}
-                  className="tile"
-                  style={tile.gridArea ? { gridArea: tile.gridArea, display: "flex", flexDirection: "column", height: "100%" } : {}}
-                >
-              <div className="tile-toolbar">
-                <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
-                  <select
-                    className="select"
-                    value={tile.type}
-                    onChange={(e) => updateTile(tile.id, { type: e.target.value as TileState["type"] })}
-                    aria-label="Tile view"
-                  >
-                    {(Object.keys(TILE_VIEW_LABELS) as TileState["type"][]).map((type) => (
-                      <option key={type} value={type}>
-                        {TILE_VIEW_LABELS[type]}
-                      </option>
-                    ))}
-                  </select>
-
-                  {(tile.type === "grid" || tile.type === "detail" || tile.type === "actions") && (
-                    <select
-                      className="select"
-                      value={tile.workbookId}
-                      onChange={(e) =>
-                        updateTile(tile.id, { workbookId: e.target.value, selectedRowId: null })
-                      }
-                      aria-label="Workbook"
-                    >
-                      {nodes
-                        .filter((n) => n.kind === "workbook" && allowedWorkbookIds.includes(n.id))
-                        .map((wb) => (
-                          <option key={wb.id} value={wb.id}>
-                            {wb.label}
-                          </option>
-                        ))}
-                    </select>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", gap: "var(--space-xs)" }}>
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={() => splitTile(idx)}
-                    title="Split pane"
-                  >
-                    Split
-                  </button>
-                  {tiles.length > 1 && (
-                    <button
-                      type="button"
-                      className="btn btn--ghost"
-                      onClick={() => closeTile(tile.id)}
-                      title="Close pane"
-                      style={{ color: "var(--color-danger)" }}
-                    >
-                      Close
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="tile-content">
-                {tile.type === "explorer" && (
-                  <ExplorerPanel
-                    nodes={nodes}
-                    edges={edges}
-                    allowedWorkbookIds={allowedWorkbookIds}
-                    activeWorkbookId={tile.workbookId}
-                    onSelectWorkbook={handleSelectWorkbookGlobal}
-                    onAddWorkbook={(label, catId) => onAddWorkbook(label, catId)}
-                    onAddCategory={onAddCategory}
-                  />
-                )}
-
-                {tile.type === "grid" && (
-                  <div className="tile-grid-wrap">
-                    <SpreadsheetGrid
-                      rows={rows}
-                      columns={columns}
-                      workbookId={tile.workbookId}
-                      onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
-                      onCreateRow={() => onCreateRow(tile.workbookId)}
-                      onDeleteRow={(rowId) => onDeleteRow(tile.workbookId, rowId)}
-                      onAddColumn={(colId, label) => onAddColumn(tile.workbookId, colId, label)}
-                      commandStates={commandStates}
-                      {...(getColumnWidth ? { getColumnWidth } : {})}
-                      {...(onColumnWidthChange ? { onColumnWidthChange } : {})}
-                      onGutterClick={(rIdx) => {
-                        const targetRow = rows[rIdx];
-                        if (targetRow) {
-                          setTiles((prev) =>
-                            prev.map((t) => {
-                              if (t.type === "detail" && t.workbookId === tile.workbookId) {
-                                return { ...t, selectedRowId: targetRow.rowId };
-                              }
-                              return t;
-                            })
-                          );
-                        }
+                <Fragment key={tile.id}>
+                  {idx > 0 && !hasGridAreas && (
+                    <div
+                      className={`tile-divider tile-divider--${layoutDirection}`}
+                      onPointerDown={(e) => handlePointerDown(e, idx - 1)}
+                      style={{
+                        width: layoutDirection === "row" ? "8px" : "100%",
+                        height: layoutDirection === "row" ? "100%" : "8px",
+                        cursor: layoutDirection === "row" ? "col-resize" : "row-resize",
+                        background: "transparent",
+                        alignSelf: "stretch",
+                        zIndex: 10,
+                        userSelect: "none",
+                        flexShrink: 0,
                       }}
                     />
+                  )}
+                  <div
+                    className="tile"
+                    style={tileStyle}
+                  >
+                    <div className="tile-toolbar">
+                      <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
+                        <select
+                          className="select"
+                          value={tile.type}
+                          onChange={(e) => updateTile(tile.id, { type: e.target.value as TileState["type"] })}
+                          aria-label="Tile view"
+                        >
+                          {(Object.keys(TILE_VIEW_LABELS) as TileState["type"][]).map((type) => (
+                            <option key={type} value={type}>
+                              {TILE_VIEW_LABELS[type]}
+                            </option>
+                          ))}
+                        </select>
+
+                        {(tile.type === "grid" || tile.type === "detail" || tile.type === "actions") && (
+                          <select
+                            className="select"
+                            value={tile.workbookId}
+                            onChange={(e) =>
+                              updateTile(tile.id, { workbookId: e.target.value, selectedRowId: null })
+                            }
+                            aria-label="Workbook"
+                          >
+                            {nodes
+                              .filter((n) => n.kind === "workbook" && allowedWorkbookIds.includes(n.id))
+                              .map((wb) => (
+                                <option key={wb.id} value={wb.id}>
+                                  {wb.label}
+                                </option>
+                              ))}
+                          </select>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", gap: "var(--space-xs)" }}>
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          onClick={() => splitTile(idx)}
+                          title="Split pane"
+                        >
+                          Split
+                        </button>
+                        {tiles.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn btn--ghost"
+                            onClick={() => closeTile(tile.id)}
+                            title="Close pane"
+                            style={{ color: "var(--color-danger)" }}
+                          >
+                            Close
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="tile-content">
+                      {tile.type === "explorer" && (
+                        <ExplorerPanel
+                          nodes={nodes}
+                          edges={edges}
+                          allowedWorkbookIds={allowedWorkbookIds}
+                          activeWorkbookId={tile.workbookId}
+                          onSelectWorkbook={handleSelectWorkbookGlobal}
+                          onAddWorkbook={(label, catId) => onAddWorkbook(label, catId)}
+                          onAddCategory={onAddCategory}
+                        />
+                      )}
+
+                      {tile.type === "grid" && (
+                        <div className="tile-grid-wrap">
+                          <SpreadsheetGrid
+                            rows={rows}
+                            columns={columns}
+                            workbookId={tile.workbookId}
+                            onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
+                            onCreateRow={() => onCreateRow(tile.workbookId)}
+                            onDeleteRow={(rowId) => onDeleteRow(tile.workbookId, rowId)}
+                            onAddColumn={(colId, label) => onAddColumn(tile.workbookId, colId, label)}
+                            commandStates={commandStates}
+                            {...(getColumnWidth ? { getColumnWidth } : {})}
+                            {...(onColumnWidthChange ? { onColumnWidthChange } : {})}
+                            onGutterClick={(rIdx) => {
+                              const targetRow = rows[rIdx];
+                              if (targetRow) {
+                                setTiles((prev) =>
+                                  prev.map((t) => {
+                                    if (t.type === "detail" && t.workbookId === tile.workbookId) {
+                                      return { ...t, selectedRowId: targetRow.rowId };
+                                    }
+                                    return t;
+                                  })
+                                );
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {tile.type === "graph" && (
+                        <WorkbookGraph
+                          nodes={nodes}
+                          edges={edges}
+                          allowedWorkbookIds={allowedWorkbookIds}
+                          activeWorkbookId={tile.workbookId}
+                          onSelectWorkbook={handleSelectWorkbookGlobal}
+                          onAddEdge={onAddEdge}
+                        />
+                      )}
+
+                      {tile.type === "detail" && (
+                        <TransposedDetail
+                          row={selectedRow}
+                          columns={columns}
+                          workbookId={tile.workbookId}
+                          onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
+                          commandStates={commandStates}
+                        />
+                      )}
+
+                      {tile.type === "actions" && (
+                        <BusinessCommandCenter
+                          activeWorkbookId={tile.workbookId}
+                          statuses={businessActionStatuses}
+                          onCreateProduct={onCreateProduct}
+                          onAdjustInventory={onAdjustInventory}
+                          onCreateSalesOrder={onCreateSalesOrder}
+                          onConfirmSalesOrder={onConfirmSalesOrder}
+                          onAllocateFulfillment={onAllocateFulfillment}
+                          onCreatePurchaseOrder={onCreatePurchaseOrder}
+                          onReceivePurchaseOrder={onReceivePurchaseOrder}
+                          onCreateParty={onCreateParty}
+                          onReceiveReturn={onReceiveReturn}
+                          onRecordPayment={onRecordPayment}
+                        />
+                      )}
+                    </div>
                   </div>
-                )}
-
-                {tile.type === "graph" && (
-                  <WorkbookGraph
-                    nodes={nodes}
-                    edges={edges}
-                    allowedWorkbookIds={allowedWorkbookIds}
-                    activeWorkbookId={tile.workbookId}
-                    onSelectWorkbook={handleSelectWorkbookGlobal}
-                    onAddEdge={onAddEdge}
-                  />
-                )}
-
-                {tile.type === "detail" && (
-                  <TransposedDetail
-                    row={selectedRow}
-                    columns={columns}
-                    workbookId={tile.workbookId}
-                    onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
-                    commandStates={commandStates}
-                  />
-                )}
-
-                {tile.type === "actions" && (
-                  <BusinessCommandCenter
-                    activeWorkbookId={tile.workbookId}
-                    statuses={businessActionStatuses}
-                    onCreateProduct={onCreateProduct}
-                    onAdjustInventory={onAdjustInventory}
-                    onCreateSalesOrder={onCreateSalesOrder}
-                    onConfirmSalesOrder={onConfirmSalesOrder}
-                    onAllocateFulfillment={onAllocateFulfillment}
-                    onCreatePurchaseOrder={onCreatePurchaseOrder}
-                    onReceivePurchaseOrder={onReceivePurchaseOrder}
-                    onCreateParty={onCreateParty}
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  })()}
+                </Fragment>
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 }

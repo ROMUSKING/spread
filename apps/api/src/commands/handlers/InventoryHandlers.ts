@@ -165,3 +165,143 @@ export class ProductCreateHandler extends CommandHandlerBase<
     return { productId, sku };
   }
 }
+
+export type InventoryReturnReceiptPayload = {
+  originalFulfillmentId?: string;
+  productId: string;
+  warehouseId: string;
+  qty: number;
+  reason: string;
+  originalOrderId?: string;
+};
+
+export class InventoryReturnReceiptHandler extends CommandHandlerBase<
+  InventoryReturnReceiptPayload,
+  { productId: string; warehouseId: string; newOnHand: number; transferId?: string }
+> {
+  readonly commandType = 'inventory.returnReceipt';
+
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<InventoryReturnReceiptPayload>,
+    context: CommandExecutionContext,
+  ): Promise<{ productId: string; warehouseId: string; newOnHand: number; transferId?: string }> {
+    const { productId, warehouseId, qty, reason, originalFulfillmentId, originalOrderId } = envelope.payload;
+    const tenant = envelope.tenantId;
+    const inventoryWorkbookId = '00000000-0000-0000-0000-000000000014'; // InventoryBalances
+    const fulfillmentWorkbookId = '00000000-0000-0000-0000-000000000017'; // Fulfillments
+
+    if (!productId || !warehouseId || typeof qty !== 'number' || qty <= 0) {
+      throw new Error('ASSERT_FAILED: productId, warehouseId, and positive numeric qty required');
+    }
+
+    const rowId = `${productId}:${warehouseId}`;
+    const onHandCol = 'quantity_on_hand';
+
+    // Fetch current on_hand
+    let currentOnHand = 0;
+    try {
+      const res = await context.tx.query(
+        `SELECT value_text FROM current_cell_values
+         WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4`,
+        [tenant, inventoryWorkbookId, rowId, onHandCol]
+      );
+      const rows = (res as any)?.rows || res || [];
+      if (rows.length > 0) currentOnHand = parseFloat(rows[0].value_text || '0') || 0;
+    } catch (e) {
+      // ignore
+    }
+
+    const newOnHand = currentOnHand + qty;
+
+    // Write inventory balances
+    await context.tx.query(
+      `INSERT INTO current_cell_values (tenant_id, workbook_id, row_id, column_id, value_text, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())
+       ON CONFLICT (tenant_id, workbook_id, row_id, column_id)
+       DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = now()`,
+      [tenant, inventoryWorkbookId, rowId, onHandCol, String(newOnHand)]
+    );
+
+    // Also write quantity_available update (on_hand - reserved)
+    let currentReserved = 0;
+    try {
+      const res = await context.tx.query(
+        `SELECT value_text FROM current_cell_values
+         WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4`,
+        [tenant, inventoryWorkbookId, rowId, 'quantity_reserved']
+      );
+      const rows = (res as any)?.rows || res || [];
+      if (rows.length > 0) currentReserved = parseFloat(rows[0].value_text || '0') || 0;
+    } catch (e) {
+      // ignore
+    }
+
+    await context.tx.query(
+      `INSERT INTO current_cell_values (tenant_id, workbook_id, row_id, column_id, value_text, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())
+       ON CONFLICT (tenant_id, workbook_id, row_id, column_id)
+       DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = now()`,
+      [tenant, inventoryWorkbookId, rowId, 'quantity_available', String(newOnHand - currentReserved)]
+    );
+
+    await context.tx.query(
+      `INSERT INTO current_cell_values (tenant_id, workbook_id, row_id, column_id, value_text, updated_at)
+       VALUES ($1, $2, $3, $4, $5, now())
+       ON CONFLICT (tenant_id, workbook_id, row_id, column_id)
+       DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = now()`,
+      [tenant, inventoryWorkbookId, rowId, 'last_adjust_reason', reason || 'return_receipt']
+    );
+
+    // Write return record in Fulfillments workbook if order/fulfillment ref provided
+    if (originalFulfillmentId || originalOrderId) {
+      const returnId = `RET-${envelope.commandId.slice(0, 8)}`;
+      const cells = [
+        ['fulfillment_id', returnId],
+        ['order_id', originalOrderId || ''],
+        ['product_id', productId],
+        ['qty', String(qty)],
+        ['status', 'RETURNED'],
+        ['reason', reason],
+        ['original_fulfillment_id', originalFulfillmentId || ''],
+      ];
+      for (const [col, val] of cells) {
+        await context.tx.query(
+          `INSERT INTO current_cell_values (tenant_id, workbook_id, row_id, column_id, value_text, updated_at)
+           VALUES ($1, $2, $3, $4, $5, now())
+           ON CONFLICT (tenant_id, workbook_id, row_id, column_id)
+           DO UPDATE SET value_text = EXCLUDED.value_text, updated_at = now()`,
+          [tenant, fulfillmentWorkbookId, returnId, col, String(val)]
+        );
+      }
+    }
+
+    // Ledger stock return (reversing shipment: SHIPPED -> AVAILABLE)
+    let transferResult: any = null;
+    try {
+      const transferIdDec = `ret_${envelope.commandId}_${productId}_${warehouseId}`.slice(0, 64);
+      const draft = {
+        transferIdDec,
+        debitAccountIdDec: '100000000000000000000000000000000001', // AVAILABLE
+        creditAccountIdDec: '400000000000000000000000000000000001', // SHIPPED
+        amountDec: String(qty),
+        ledgerCode: '1',
+        movementKind: 'stock_return',
+        payloadHash: envelope.requestHash || transferIdDec,
+        commandId: envelope.commandId,
+        commandLineIndex: 0,
+        domainObjectRef: { productId, warehouseId, originalFulfillmentId, originalOrderId, reason },
+      };
+      transferResult = await context.ledger.createTransfer(draft);
+    } catch (e) {
+      // ignore
+    }
+
+    return {
+      productId,
+      warehouseId,
+      newOnHand,
+      transferId: transferResult?.transferIdDec,
+    };
+  }
+}
+

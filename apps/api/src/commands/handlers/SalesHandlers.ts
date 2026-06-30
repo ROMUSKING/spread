@@ -839,3 +839,99 @@ export class OrderFulfillShipHandler extends CommandHandlerBase<
     };
   }
 }
+
+export type PaymentRecordPayload = {
+  orderId: string;
+  customerId: string;
+  amount: string;
+  paymentMethod: string;
+};
+
+export class PaymentRecordHandler extends CommandHandlerBase<
+  PaymentRecordPayload,
+  { orderId: string; paymentId: string; status: string }
+> {
+  readonly commandType = 'payment.record';
+
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<PaymentRecordPayload>,
+    context: CommandExecutionContext,
+  ): Promise<{ orderId: string; paymentId: string; status: string }> {
+    const { orderId, customerId, amount, paymentMethod } = envelope.payload;
+    const tenantId = envelope.tenantId;
+    const financialWorkbookId = '00000000-0000-0000-0000-000000000004'; // Purchase Ledger / Financials
+    const salesWorkbookId = envelope.workbookId || SALES_ORDERS_WORKBOOK_ID;
+
+    if (!orderId || !customerId || !amount) {
+      throw new Error('ASSERT_FAILED: orderId, customerId, and amount required');
+    }
+
+    const headerRowId = `${orderId}-HDR`;
+    const existingOrderId = await readCell(
+      context.tx,
+      tenantId,
+      salesWorkbookId,
+      headerRowId,
+      'order_id'
+    );
+    if (!existingOrderId) {
+      throw new Error(`ORDER_NOT_FOUND: ${orderId}`);
+    }
+
+    const paymentId = `PAY-${envelope.commandId.slice(0, 8)}`;
+    const nowIso = new Date().toISOString();
+
+    // Write financial ledger entry in workbook 004
+    const cells: Array<[string, string]> = [
+      ['vendor_name', customerId],
+      ['invoice_no', orderId],
+      ['amount_due', '0.00'],
+      ['payment_status', 'Paid'],
+      ['payment_id', paymentId],
+      ['payment_method', paymentMethod || 'Cash'],
+      ['amount_paid', amount],
+      ['paid_at', nowIso],
+    ];
+
+    for (const [col, val] of cells) {
+      await upsertCell(context.tx, tenantId, financialWorkbookId, paymentId, col, val);
+    }
+
+    // Update sales order status to INVOICED
+    await upsertCell(context.tx, tenantId, salesWorkbookId, headerRowId, 'status', 'INVOICED');
+    await upsertCell(context.tx, tenantId, salesWorkbookId, headerRowId, 'payment_status', 'Paid');
+    await upsertCell(context.tx, tenantId, salesWorkbookId, headerRowId, 'payment_id', paymentId);
+
+    // Update lines status to INVOICED
+    const targetLineRowIds = await listLineRowIds(
+      context.tx,
+      tenantId,
+      salesWorkbookId,
+      `${orderId}-L%`
+    );
+    for (const rowId of targetLineRowIds) {
+      await upsertCell(context.tx, tenantId, salesWorkbookId, rowId, 'status', 'INVOICED');
+    }
+
+    // Ledger posting for cash received (debit Cash, credit AR)
+    try {
+      await context.ledger.createTransfer({
+        transferIdDec: `pay_${envelope.commandId}_${orderId}`.slice(0, 64),
+        debitAccountIdDec: '800000000000000000000000000000000001', // CASH
+        creditAccountIdDec: '700000000000000000000000000000000001', // AR
+        amountDec: amount,
+        ledgerCode: '1',
+        movementKind: 'cash_received',
+        payloadHash: envelope.requestHash || paymentId,
+        commandId: envelope.commandId,
+        commandLineIndex: 0,
+        domainObjectRef: { orderId, customerId, paymentId, paymentMethod },
+      });
+    } catch (e) {
+      // ignore
+    }
+
+    return { orderId, paymentId, status: 'INVOICED' };
+  }
+}
+

@@ -11,6 +11,8 @@ import {
   type PurchaseOrderReceiveInput,
   type SalesOrderConfirmInput,
   type SalesOrderCreateInput,
+  type InventoryReturnReceiptInput,
+  type PaymentRecordInput,
 } from "../components/BusinessCommandCenter";
 import { TiledWorkspace } from "../components/TiledWorkspace";
 import { AppPreferences } from "../components/AppPreferences";
@@ -215,6 +217,8 @@ export default function Page() {
   const purchaseOrderCreateCmd = useCommand("purchaseOrder.create", { tenantId, baseUrl: apiBaseUrl });
   const purchaseOrderReceiveCmd = useCommand("purchaseOrder.receive", { tenantId, baseUrl: apiBaseUrl });
   const partyCreateCmd = useCommand("party.create", { tenantId, baseUrl: apiBaseUrl });
+  const inventoryReturnReceiptCmd = useCommand("inventory.returnReceipt", { tenantId, baseUrl: apiBaseUrl });
+  const paymentRecordCmd = useCommand("payment.record", { tenantId, baseUrl: apiBaseUrl });
 
   const refreshGraph = useCallback(async () => {
     try {
@@ -1044,6 +1048,53 @@ export default function Page() {
     [partyCreateCmd, runBusinessCommand]
   );
 
+  const handleReceiveReturn = useCallback(
+    async (input: InventoryReturnReceiptInput) => {
+      return runBusinessCommand({
+        controller: inventoryReturnReceiptCmd,
+        payload: {
+          originalFulfillmentId: input.originalFulfillmentId || undefined,
+          productId: input.productId,
+          warehouseId: input.warehouseId,
+          qty: Number(input.qty),
+          reason: input.reason,
+          originalOrderId: input.originalOrderId || undefined,
+        },
+        workbookId: "00000000-0000-0000-0000-000000000017",
+        refreshWorkbooks: [
+          "00000000-0000-0000-0000-000000000017",
+          "00000000-0000-0000-0000-000000000014",
+          "00000000-0000-0000-0000-000000000015",
+        ],
+        successMessage: `Returned stock received for product ${input.productId}.`,
+        commandLabel: "Return receipt processing",
+      });
+    },
+    [inventoryReturnReceiptCmd, runBusinessCommand]
+  );
+
+  const handleRecordPayment = useCallback(
+    async (input: PaymentRecordInput) => {
+      return runBusinessCommand({
+        controller: paymentRecordCmd,
+        payload: {
+          orderId: input.orderId,
+          customerId: input.customerId,
+          amount: input.amount,
+          paymentMethod: input.paymentMethod,
+        },
+        workbookId: "00000000-0000-0000-0000-000000000004",
+        refreshWorkbooks: [
+          "00000000-0000-0000-0000-000000000004",
+          "00000000-0000-0000-0000-000000000015",
+        ],
+        successMessage: `Payment of $${input.amount} recorded for order ${input.orderId}.`,
+        commandLabel: "Payment recording",
+      });
+    },
+    [paymentRecordCmd, runBusinessCommand]
+  );
+
   const businessActionStatuses: BusinessActionStatusMap = {
     product: {
       state: productCreateCmd.state,
@@ -1100,6 +1151,20 @@ export default function Page() {
       error: partyCreateCmd.error?.message || null,
       elapsedMs: partyCreateCmd.elapsedMs,
       reset: partyCreateCmd.refresh,
+    },
+    inventoryReturnReceipt: {
+      state: inventoryReturnReceiptCmd.state,
+      commandId: inventoryReturnReceiptCmd.commandId,
+      error: inventoryReturnReceiptCmd.error?.message || null,
+      elapsedMs: inventoryReturnReceiptCmd.elapsedMs,
+      reset: inventoryReturnReceiptCmd.refresh,
+    },
+    paymentRecord: {
+      state: paymentRecordCmd.state,
+      commandId: paymentRecordCmd.commandId,
+      error: paymentRecordCmd.error?.message || null,
+      elapsedMs: paymentRecordCmd.elapsedMs,
+      reset: paymentRecordCmd.refresh,
     },
   };
 
@@ -1197,6 +1262,8 @@ export default function Page() {
         onCreatePurchaseOrder={handleCreatePurchaseOrder}
         onReceivePurchaseOrder={handleReceivePurchaseOrder}
         onCreateParty={handleCreateParty}
+        onReceiveReturn={handleReceiveReturn}
+        onRecordPayment={handleRecordPayment}
       />
     </main>
   );

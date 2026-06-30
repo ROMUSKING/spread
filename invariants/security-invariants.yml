@@ -1,4 +1,4 @@
-version: 0.17.0
+version: 0.17.1
 last_reviewed: '2026-06-26'
 invariants:
 - id: AC-001

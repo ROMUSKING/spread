@@ -77,7 +77,7 @@ test('ci://tests/process/agent-pr-template-present', () => {
 
 test('ci://tests/security/invariant-manifest-validation', () => {
   const content = fs.readFileSync('invariants/security-invariants.yml', 'utf8');
-  assert.ok(content.includes('version: 0.17.0'));
+  assert.ok(content.includes('version: 0.17.1'));
 });
 
 test('ci://tests/security/evidence-uri-scheme-validation', () => {
@@ -2237,4 +2237,131 @@ test('fulfillment.allocate fails with INSUFFICIENT_AVAILABLE_STOCK on negative p
   assert.equal(allocateResult.status, 'failed');
   assert.match(String(allocateResult.problem?.message || ''), /INSUFFICIENT_AVAILABLE_STOCK/);
 });
+
+test('inventory.returnReceipt successfully processes stock return and posts to ledger', async () => {
+  const { InventoryReturnReceiptHandler } = await import('../apps/api/src/commands/handlers/InventoryHandlers.ts');
+
+  const cellsMap = new Map();
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_on_hand', '10');
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_reserved', '2');
+
+  const ledgerTransfers = [];
+  const mockDb = {
+    query: async (sql, params) => {
+      const s = sql.trim().replace(/\s+/g, ' ');
+      if (s.includes('INSERT INTO current_cell_values')) {
+        const [tenant, wb, row, col, val] = params;
+        cellsMap.set(`${tenant}:${wb}:${row}:${col}`, val);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT value_text FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4')) {
+        const [tenant, wb, row, col] = params;
+        const val = cellsMap.get(`${tenant}:${wb}:${row}:${col}`);
+        return { rows: val !== undefined ? [{ value_text: val }] : [] };
+      }
+      if (s.includes('INSERT INTO numeric_transfers')) {
+        ledgerTransfers.push(params);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT transfer_payload_hash')) {
+        return { rows: [] };
+      }
+      if (s.includes('SELECT command_status')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const handler = new InventoryReturnReceiptHandler();
+  const processor = new CommandProcessor(mockDb, new Map([['inventory.returnReceipt', handler]]));
+
+  const result = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-return-test-1',
+    commandType: 'inventory.returnReceipt',
+    payload: {
+      originalFulfillmentId: 'FUL-001',
+      productId: 'PROD-001',
+      warehouseId: 'w1',
+      qty: 5,
+      reason: 'wrong-color',
+      originalOrderId: 'SO-001',
+    },
+    workbookId: '00000000-0000-0000-0000-000000000017',
+  }, null, null, '00000000-0000-0000-0000-000000000017');
+
+  assert.equal(result.status, 'committed');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_on_hand'), '15');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_available'), '13');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000017:RET-cmd-retu:status'), 'RETURNED');
+  assert.equal(ledgerTransfers.length, 1);
+  assert.equal(ledgerTransfers[0][13], 'stock_return');
+});
+
+test('payment.record updates order status to INVOICED and posts cash receipt', async () => {
+  const { PaymentRecordHandler } = await import('../apps/api/src/commands/handlers/SalesHandlers.ts');
+
+  const cellsMap = new Map();
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000015:SO-001-HDR:order_id', 'SO-001');
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000015:SO-001-HDR:status', 'SHIPPED');
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000015:SO-001-L1:status', 'SHIPPED');
+
+  const ledgerTransfers = [];
+  const mockDb = {
+    query: async (sql, params) => {
+      const s = sql.trim().replace(/\s+/g, ' ');
+      if (s.includes('INSERT INTO current_cell_values')) {
+        const [tenant, wb, row, col, val] = params;
+        cellsMap.set(`${tenant}:${wb}:${row}:${col}`, val);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT value_text FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4')) {
+        const [tenant, wb, row, col] = params;
+        const val = cellsMap.get(`${tenant}:${wb}:${row}:${col}`);
+        return { rows: val !== undefined ? [{ value_text: val }] : [] };
+      }
+      if (s.includes("SELECT row_id FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id LIKE $3 AND column_id = 'order_id'")) {
+        return { rows: [{ row_id: 'SO-001-L1' }] };
+      }
+      if (s.includes('INSERT INTO numeric_transfers')) {
+        ledgerTransfers.push(params);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT transfer_payload_hash')) {
+        return { rows: [] };
+      }
+      if (s.includes('SELECT command_status')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const handler = new PaymentRecordHandler();
+  const processor = new CommandProcessor(mockDb, new Map([['payment.record', handler]]));
+
+  const result = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-payment-test-1',
+    commandType: 'payment.record',
+    payload: {
+      orderId: 'SO-001',
+      customerId: 'CUST-001',
+      amount: '120.50',
+      paymentMethod: 'Credit Card',
+    },
+    workbookId: '00000000-0000-0000-0000-000000000015',
+  }, null, null, '00000000-0000-0000-0000-000000000015');
+
+  assert.equal(result.status, 'committed');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000015:SO-001-HDR:status'), 'INVOICED');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000015:SO-001-L1:status'), 'INVOICED');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000015:SO-001-HDR:payment_status'), 'Paid');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000004:PAY-cmd-paym:payment_status'), 'Paid');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000004:PAY-cmd-paym:amount_paid'), '120.50');
+  assert.equal(ledgerTransfers.length, 1);
+  assert.equal(ledgerTransfers[0][4], '800000000000000000000000000000000001');
+  assert.equal(ledgerTransfers[0][5], '700000000000000000000000000000000001');
+  assert.equal(ledgerTransfers[0][13], 'cash_received');
+});
+
 

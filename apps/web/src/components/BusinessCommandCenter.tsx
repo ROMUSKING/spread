@@ -85,6 +85,22 @@ export type PartyCreateInput = {
   paymentTerms: string;
 };
 
+export type InventoryReturnReceiptInput = {
+  originalFulfillmentId: string;
+  productId: string;
+  warehouseId: string;
+  qty: string;
+  reason: string;
+  originalOrderId: string;
+};
+
+export type PaymentRecordInput = {
+  orderId: string;
+  customerId: string;
+  amount: string;
+  paymentMethod: string;
+};
+
 export type BusinessActionStatus = {
   state: CommandLifecycleState;
   commandId: string | null;
@@ -102,6 +118,8 @@ export type BusinessActionStatusMap = {
   purchaseOrder: BusinessActionStatus;
   purchaseReceipt: BusinessActionStatus;
   party: BusinessActionStatus;
+  inventoryReturnReceipt: BusinessActionStatus;
+  paymentRecord: BusinessActionStatus;
 };
 
 type BusinessCommandCenterProps = {
@@ -115,9 +133,11 @@ type BusinessCommandCenterProps = {
   onCreatePurchaseOrder: (input: PurchaseOrderCreateInput) => Promise<boolean>;
   onReceivePurchaseOrder: (input: PurchaseOrderReceiveInput) => Promise<boolean>;
   onCreateParty: (input: PartyCreateInput) => Promise<boolean>;
+  onReceiveReturn: (input: InventoryReturnReceiptInput) => Promise<boolean>;
+  onRecordPayment: (input: PaymentRecordInput) => Promise<boolean>;
 };
 
-type SectionKey = "product" | "inventory" | "salesOrder" | "purchaseOrder" | "party";
+type SectionKey = "product" | "inventory" | "salesOrder" | "purchaseOrder" | "party" | "returns" | "financials";
 
 function actionTone(state: CommandLifecycleState): { label: string; color: string } {
   switch (state) {
@@ -268,6 +288,8 @@ export function BusinessCommandCenter({
   onCreatePurchaseOrder,
   onReceivePurchaseOrder,
   onCreateParty,
+  onReceiveReturn,
+  onRecordPayment,
 }: BusinessCommandCenterProps) {
   const [product, setProduct] = useState<ProductCreateInput>({
     productId: "",
@@ -330,6 +352,20 @@ export function BusinessCommandCenter({
     leadTimeDays: "0",
     paymentTerms: "NET30",
   });
+  const [returnReceipt, setReturnReceipt] = useState<InventoryReturnReceiptInput>({
+    originalFulfillmentId: "",
+    productId: "",
+    warehouseId: "",
+    qty: "1",
+    reason: "customer-return",
+    originalOrderId: "",
+  });
+  const [paymentRecord, setPaymentRecord] = useState<PaymentRecordInput>({
+    orderId: "",
+    customerId: "",
+    amount: "0.00",
+    paymentMethod: "Cash",
+  });
 
   const visibleSections = useMemo<SectionKey[]>(() => {
     if (activeWorkbookId === INVENTORY_WORKBOOK_ID) {
@@ -341,11 +377,17 @@ export function BusinessCommandCenter({
     if (activeWorkbookId === PURCHASE_ORDERS_WORKBOOK_ID) {
       return ["purchaseOrder", "party"];
     }
+    if (activeWorkbookId === "00000000-0000-0000-0000-000000000017") { // Fulfillments
+      return ["returns"];
+    }
+    if (activeWorkbookId === "00000000-0000-0000-0000-000000000004") { // Purchase Ledger / Financials
+      return ["financials"];
+    }
     if (MASTER_DATA_WORKBOOK_IDS.has(activeWorkbookId)) {
       return ["product", "party"];
     }
 
-    return ["product", "inventory", "salesOrder", "purchaseOrder", "party"];
+    return ["product", "inventory", "salesOrder", "purchaseOrder", "party", "returns", "financials"];
   }, [activeWorkbookId]);
 
   return (
@@ -586,6 +628,70 @@ export function BusinessCommandCenter({
             </ActionForm>
           </SectionCard>
           <ActionStatusCard title="Party create" status={statuses.party} />
+        </>
+      )}
+
+      {visibleSections.includes("returns") && (
+        <>
+          <SectionCard
+            title="Receive Return"
+            description="Process a customer return by adding stock back to on-hand and recording a return receipt in fulfillments."
+          >
+            <ActionForm
+              submitLabel="Receive return"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (await onReceiveReturn(returnReceipt)) {
+                  setReturnReceipt({
+                    originalFulfillmentId: "",
+                    productId: "",
+                    warehouseId: "",
+                    qty: "1",
+                    reason: "customer-return",
+                    originalOrderId: "",
+                  });
+                }
+              }}
+            >
+              <LabeledInput label="Original Order ID" value={returnReceipt.originalOrderId} onChange={(value) => setReturnReceipt((prev) => ({ ...prev, originalOrderId: value }))} placeholder="SO-001" />
+              <LabeledInput label="Original Fulfillment ID" value={returnReceipt.originalFulfillmentId} onChange={(value) => setReturnReceipt((prev) => ({ ...prev, originalFulfillmentId: value }))} placeholder="FUL-001" />
+              <LabeledInput label="Product ID" value={returnReceipt.productId} onChange={(value) => setReturnReceipt((prev) => ({ ...prev, productId: value }))} placeholder="PROD-0001" />
+              <LabeledInput label="Warehouse ID" value={returnReceipt.warehouseId} onChange={(value) => setReturnReceipt((prev) => ({ ...prev, warehouseId: value }))} placeholder="w1" />
+              <LabeledInput label="Qty" value={returnReceipt.qty} onChange={(value) => setReturnReceipt((prev) => ({ ...prev, qty: value }))} type="number" />
+              <LabeledInput label="Reason" value={returnReceipt.reason} onChange={(value) => setReturnReceipt((prev) => ({ ...prev, reason: value }))} placeholder="wrong-size" />
+            </ActionForm>
+          </SectionCard>
+          <ActionStatusCard title="Receive return" status={statuses.inventoryReturnReceipt} />
+        </>
+      )}
+
+      {visibleSections.includes("financials") && (
+        <>
+          <SectionCard
+            title="Record Payment"
+            description="Record a customer payment against a sales order and update the financials ledger."
+          >
+            <ActionForm
+              submitLabel="Record payment"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (await onRecordPayment(paymentRecord)) {
+                  setPaymentRecord({
+                    orderId: "",
+                    customerId: "",
+                    amount: "0.00",
+                    paymentMethod: "Cash",
+                  });
+                }
+              }}
+            >
+              <LabeledInput label="Order ID" value={paymentRecord.orderId} onChange={(value) => setPaymentRecord((prev) => ({ ...prev, orderId: value }))} placeholder="SO-001" />
+              <LabeledInput label="Customer ID" value={paymentRecord.customerId} onChange={(value) => setPaymentRecord((prev) => ({ ...prev, customerId: value }))} placeholder="CUST-PARTY-001" />
+              <LabeledInput label="Amount Paid" value={paymentRecord.amount} onChange={(value) => setPaymentRecord((prev) => ({ ...prev, amount: value }))} type="number" />
+              <LabeledInput label="Payment Method" value={paymentRecord.paymentMethod} onChange={(value) => setPaymentRecord((prev) => ({ ...prev, paymentMethod: value }))} placeholder="Cash" />
+            </ActionForm>
+          </SectionCard>
+          <ActionStatusCard title="Record payment" status={statuses.paymentRecord} />
         </>
       )}
     </div>
