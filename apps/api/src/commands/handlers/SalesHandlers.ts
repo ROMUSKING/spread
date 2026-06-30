@@ -8,10 +8,18 @@ import type { CommandExecutionContext } from '../CommandHandlerBase';
 const SALES_ORDERS_WORKBOOK_ID = '00000000-0000-0000-0000-000000000015';
 const INVENTORY_BALANCES_WORKBOOK_ID =
   '00000000-0000-0000-0000-000000000014';
+const PRODUCTS_WORKBOOK_ID = '00000000-0000-0000-0000-000000000010';
+const FULFILLMENTS_WORKBOOK_ID =
+  '00000000-0000-0000-0000-000000000017';
 const STOCK_AVAILABLE_ACCOUNT_ID =
   '100000000000000000000000000000000001';
 const STOCK_RESERVED_ACCOUNT_ID =
   '300000000000000000000000000000000001';
+const STOCK_SHIPPED_ACCOUNT_ID =
+  '400000000000000000000000000000000001';
+const INVENTORY_VALUATION_ACCOUNT_ID =
+  '500000000000000000000000000000000001';
+const COGS_ACCOUNT_ID = '600000000000000000000000000000000001';
 
 async function upsertCell(
   tx: CommandExecutionContext['tx'],
@@ -510,6 +518,324 @@ export class FulfillmentAllocateHandler extends CommandHandlerBase<
       orderId,
       linesAllocated: lines.length,
       status: nextHeaderStatus,
+    };
+  }
+}
+
+export type OrderFulfillShipPayload = {
+  orderId: string;
+  fulfillmentId?: string;
+  lines: Array<{
+    lineId: string;
+    productId: string;
+    warehouseId?: string;
+    qty: number;
+  }>;
+};
+
+export class OrderFulfillShipHandler extends CommandHandlerBase<
+  OrderFulfillShipPayload,
+  { orderId: string; linesShipped: number; status: string; fulfillmentId?: string }
+> {
+  readonly commandType = 'order.fulfillShip';
+
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<OrderFulfillShipPayload>,
+    context: CommandExecutionContext,
+  ): Promise<{ orderId: string; linesShipped: number; status: string; fulfillmentId?: string }> {
+    const { orderId, fulfillmentId, lines } = envelope.payload;
+    const tenantId = envelope.tenantId;
+    const workbookId = envelope.workbookId || SALES_ORDERS_WORKBOOK_ID;
+
+    if (!orderId || !Array.isArray(lines) || lines.length === 0) {
+      throw new Error('ASSERT_FAILED: orderId and at least one fulfill line required');
+    }
+
+    const headerRowId = `${orderId}-HDR`;
+    const headerOrderId = await readCell(
+      context.tx,
+      tenantId,
+      workbookId,
+      headerRowId,
+      'order_id',
+    );
+    if (!headerOrderId) {
+      throw new Error(`ORDER_NOT_FOUND: ${orderId}`);
+    }
+
+    const currentStatus =
+      (await readCell(context.tx, tenantId, workbookId, headerRowId, 'status')) ||
+      'DRAFT';
+    if (!['ALLOCATED', 'SHIPPED'].includes(currentStatus)) {
+      throw new Error(
+        `INVALID_STATUS_TRANSITION: ${currentStatus} cannot move to SHIPPED`,
+      );
+    }
+
+    const shippedAt = new Date().toISOString();
+    const resolvedFulfillmentId = fulfillmentId || `FUL-${envelope.commandId.slice(0, 8)}`;
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (!line) continue;
+
+      const { lineId, productId, warehouseId: lineWh, qty } = line;
+      if (!lineId || !productId || !Number.isFinite(qty) || qty <= 0) {
+        throw new Error(
+          'ASSERT_FAILED: lineId, productId, and positive qty required',
+        );
+      }
+
+      const salesRowId = `${orderId}-L${lineId}`;
+      const existingOrderId = await readCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'order_id',
+      );
+      if (!existingOrderId) {
+        throw new Error(`ORDER_LINE_NOT_FOUND: ${salesRowId}`);
+      }
+
+      const existingProductId = await readCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'product_id',
+      );
+      if (existingProductId !== productId) {
+        throw new Error(
+          `PRODUCT_MISMATCH: expected ${existingProductId}, received ${productId}`,
+        );
+      }
+
+      const currentLineStatus =
+        (await readCell(context.tx, tenantId, workbookId, salesRowId, 'status')) ||
+        currentStatus;
+      if (currentLineStatus !== 'ALLOCATED') {
+        throw new Error(
+          `INVALID_LINE_STATUS_TRANSITION: ${currentLineStatus} cannot move to SHIPPED`,
+        );
+      }
+
+      // Determine warehouse (prefer payload, fallback to prior allocation on line)
+      const warehouseId =
+        lineWh ||
+        (await readCell(context.tx, tenantId, workbookId, salesRowId, 'warehouse_id')) ||
+        'w1';
+
+      const inventoryRowId = `${productId}:${warehouseId}`;
+      const currentOnHand = parseNumber(
+        await readCell(
+          context.tx,
+          tenantId,
+          INVENTORY_BALANCES_WORKBOOK_ID,
+          inventoryRowId,
+          'quantity_on_hand',
+        ),
+        0,
+      );
+      const currentReserved = parseNumber(
+        await readCell(
+          context.tx,
+          tenantId,
+          INVENTORY_BALANCES_WORKBOOK_ID,
+          inventoryRowId,
+          'quantity_reserved',
+        ),
+        0,
+      );
+      if (currentReserved < qty) {
+        throw new Error(
+          `INSUFFICIENT_RESERVED_STOCK: ${productId}:${warehouseId} has reserved ${currentReserved}, needs ${qty}`,
+        );
+      }
+
+      const nextOnHand = currentOnHand - qty;
+      const nextReserved = currentReserved - qty;
+      if (nextOnHand < 0 || nextReserved < 0) {
+        throw new Error('INVENTORY_NEGATIVE: ship would result in negative stock');
+      }
+
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'product_id',
+        productId,
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'warehouse_id',
+        warehouseId,
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'quantity_on_hand',
+        String(nextOnHand),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'quantity_reserved',
+        String(nextReserved),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'quantity_available',
+        String(nextOnHand - nextReserved),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'last_shipped_order_id',
+        orderId,
+      );
+
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'status',
+        'SHIPPED',
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'warehouse_id',
+        warehouseId,
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'shipped_qty',
+        String(qty),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'shipped_at',
+        shippedAt,
+      );
+
+      // qty movement: reserved -> shipped
+      try {
+        const transferIdDec = `ship_${envelope.commandId}_${orderId}_${lineId}`.slice(0, 64);
+        await context.ledger.createTransfer({
+          transferIdDec,
+          debitAccountIdDec: STOCK_RESERVED_ACCOUNT_ID,
+          creditAccountIdDec: STOCK_SHIPPED_ACCOUNT_ID,
+          amountDec: String(qty),
+          ledgerCode: '1',
+          movementKind: 'stock_ship',
+          payloadHash: envelope.requestHash || transferIdDec,
+          commandId: envelope.commandId,
+          commandLineIndex: index,
+          domainObjectRef: {
+            orderId,
+            lineId,
+            productId,
+            warehouseId,
+            inventoryRowId,
+          },
+        });
+      } catch {
+        // Early Phase 0: tolerate ledger while workbook state advances.
+      }
+
+      // COGS transition using standard_cost (or cost) from Products at ship time
+      const costText =
+        (await readCell(context.tx, tenantId, PRODUCTS_WORKBOOK_ID, productId, 'standard_cost')) ||
+        (await readCell(context.tx, tenantId, PRODUCTS_WORKBOOK_ID, productId, 'cost')) ||
+        '0';
+      const unitCost = parseNumber(costText, 0);
+      const cogsAmount = (qty * unitCost).toFixed(2);
+      try {
+        const cogsTid = `cogs_${envelope.commandId}_${orderId}_${lineId}`.slice(0, 64);
+        await context.ledger.createTransfer({
+          transferIdDec: cogsTid,
+          debitAccountIdDec: COGS_ACCOUNT_ID,
+          creditAccountIdDec: INVENTORY_VALUATION_ACCOUNT_ID,
+          amountDec: cogsAmount,
+          ledgerCode: '1',
+          movementKind: 'cogs_fulfill',
+          payloadHash: envelope.requestHash || cogsTid,
+          commandId: envelope.commandId,
+          commandLineIndex: index,
+          domainObjectRef: {
+            orderId,
+            lineId,
+            productId,
+            qty,
+            unitCost,
+            inventoryRowId,
+          },
+        });
+      } catch {
+        // tolerate for demo
+      }
+    }
+
+    const allLineRowIds = await listLineRowIds(
+      context.tx,
+      tenantId,
+      workbookId,
+      `${orderId}-L%`,
+    );
+    const allShippedStatuses = await Promise.all(
+      allLineRowIds.map((rowId) =>
+        readCell(context.tx, tenantId, workbookId, rowId, 'status'),
+      ),
+    );
+    const nextHeaderStatus = allShippedStatuses.every((status) => status === 'SHIPPED')
+      ? 'SHIPPED'
+      : 'ALLOCATED';
+
+    await upsertCell(
+      context.tx,
+      tenantId,
+      workbookId,
+      headerRowId,
+      'status',
+      nextHeaderStatus,
+    );
+    await upsertCell(
+      context.tx,
+      tenantId,
+      workbookId,
+      headerRowId,
+      'shipped_at',
+      shippedAt,
+    );
+
+    return {
+      orderId,
+      linesShipped: lines.length,
+      status: nextHeaderStatus,
+      fulfillmentId: resolvedFulfillmentId,
     };
   }
 }

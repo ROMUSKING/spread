@@ -36,6 +36,7 @@ import {
   FulfillmentAllocateHandler,
   SalesOrderConfirmHandler,
   SalesOrderCreateHandler,
+  OrderFulfillShipHandler,
 } from './commands/handlers/SalesHandlers';
 import {
   ProductTemplateCreateHandler,
@@ -47,6 +48,7 @@ import {
 } from './commands/handlers/MasterDataHandlers';
 import type { CommandEnvelope } from '@erp/domain/commands/types';
 import { RateLimiter } from './http/RateLimiter';
+import { isAllowedWorkbook } from '@erp/contracts/workbooks';
 
 // Ensure Phase 0 flags (post-MVP off)
 assertPhase0RuntimeFlags();
@@ -55,30 +57,9 @@ assertPhase0RuntimeFlags();
 const PORT = Number(process.env.API_PORT || 3001);
 const DEFAULT_TENANT = '00000000-0000-0000-0000-000000000001'; // matches seed
 const DEFAULT_WORKBOOK = '00000000-0000-0000-0000-000000000002';
-const ALLOWED_WORKBOOKS = [
-  '00000000-0000-0000-0000-000000000002', // Sales Orders (pilot)
-  '00000000-0000-0000-0000-000000000003', // Inventory Stock (pilot)
-  '00000000-0000-0000-0000-000000000004', // Purchase Ledger (pilot)
-  // Ecom domain workbooks (see design spec + workbookConstants.ts)
-  // KEEP IN SYNC with apps/web/src/lib/workbookConstants.ts + page.tsx + workbookUtils.ts + these guards (design Issue 2)
-  '00000000-0000-0000-0000-000000000010', // Products
-  '00000000-0000-0000-0000-000000000011', // Customers
-  '00000000-0000-0000-0000-000000000012', // Suppliers
-  '00000000-0000-0000-0000-000000000013', // Warehouses
-  '00000000-0000-0000-0000-000000000014', // InventoryBalances
-  '00000000-0000-0000-0000-000000000015', // SalesOrders
-  '00000000-0000-0000-0000-000000000016', // PurchaseOrders
-  '00000000-0000-0000-0000-000000000017', // Fulfillments
-  '00000000-0000-0000-0000-000000000018', // SalesOrderHeaders
-  '00000000-0000-0000-0000-000000000019', // PurchaseOrderHeaders
-  // Extended master data workbooks (from sme-extended-variants-and-entities-spec.md)
-  '00000000-0000-0000-0000-000000000021', // ProductTemplates
-  '00000000-0000-0000-0000-000000000022', // ProductVariants
-  '00000000-0000-0000-0000-000000000023', // Parties
-  '00000000-0000-0000-0000-000000000024', // Customers (extended)
-  '00000000-0000-0000-0000-000000000025', // Suppliers (extended)
-  '00000000-0000-0000-0000-000000000026', // Addresses
-];
+
+// ALLOWED_WORKBOOKS is centralized in @erp/contracts (see workbooks.ts).
+// Single source eliminates prior duplication with apps/web/src/lib/workbookConstants.ts.
 
 // In-memory tracer/metrics for Phase 0 (real OTEL later)
 const tracer = new InMemoryTracer();
@@ -228,6 +209,7 @@ export async function startApi(): Promise<void> {
   handlers.set('salesOrder.create', new SalesOrderCreateHandler());
   handlers.set('salesOrder.confirm', new SalesOrderConfirmHandler());
   handlers.set('fulfillment.allocate', new FulfillmentAllocateHandler());
+  handlers.set('order.fulfillShip', new OrderFulfillShipHandler());
   handlers.set('purchaseOrder.create', new PurchaseOrderCreateHandler());
   handlers.set('purchaseOrder.receive', new PurchaseOrderReceiveHandler());
   // Extended master data handlers
@@ -296,7 +278,7 @@ export async function startApi(): Promise<void> {
         // Client identity allowlist / validation at entry (fail fast before rate/processor; explicit reject, no silent remap)
         if (
           tenantId !== DEFAULT_TENANT ||
-          !ALLOWED_WORKBOOKS.includes(workbookId)
+          !isAllowedWorkbook(workbookId)
         ) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(
@@ -354,7 +336,7 @@ export async function startApi(): Promise<void> {
         const wbHdr =
           req.headers['x-workbook-id']?.toString() || DEFAULT_WORKBOOK;
         // Fail fast explicit reject (no silent remap); wb threaded for future lookup match
-        if (tenantId !== DEFAULT_TENANT || !ALLOWED_WORKBOOKS.includes(wbHdr)) {
+        if (tenantId !== DEFAULT_TENANT || !isAllowedWorkbook(wbHdr)) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
@@ -387,7 +369,7 @@ export async function startApi(): Promise<void> {
         // Explicit 400 reject (no remap) for /workbooks
         if (
           tenantId !== DEFAULT_TENANT ||
-          !ALLOWED_WORKBOOKS.includes(workbookId)
+          !isAllowedWorkbook(workbookId)
         ) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(
@@ -475,7 +457,7 @@ export async function startApi(): Promise<void> {
         // Explicit 400 reject (no remap) for /events; wb for SSE demand
         if (
           tenantId !== DEFAULT_TENANT ||
-          !ALLOWED_WORKBOOKS.includes(workbookId)
+          !isAllowedWorkbook(workbookId)
         ) {
           res.writeHead(400, { 'content-type': 'application/json' });
           res.end(

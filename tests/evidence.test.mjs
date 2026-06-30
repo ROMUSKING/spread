@@ -2146,3 +2146,95 @@ test('fulfillment.allocate reserves stock for a confirmed order line', async () 
   assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_available'), '7');
 });
 
+test('fulfillment.allocate fails with INSUFFICIENT_AVAILABLE_STOCK on negative path', async () => {
+  const {
+    FulfillmentAllocateHandler,
+    SalesOrderConfirmHandler,
+    SalesOrderCreateHandler,
+  } = await import('../apps/api/src/commands/handlers/SalesHandlers.ts');
+
+  const cellsMap = new Map();
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:product_id', 'PROD-001');
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:warehouse_id', 'w1');
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_on_hand', '2');
+  cellsMap.set('t1:00000000-0000-0000-0000-000000000014:PROD-001:w1:quantity_reserved', '0');
+
+  const mockDb = {
+    query: async (sql, params) => {
+      const s = sql.trim().replace(/\s+/g, ' ');
+      if (s.includes('INSERT INTO current_cell_values')) {
+        const [tenant, wb, row, col, val] = params;
+        cellsMap.set(`${tenant}:${wb}:${row}:${col}`, val);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT value_text FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4')) {
+        const [tenant, wb, row, col] = params;
+        const val = cellsMap.get(`${tenant}:${wb}:${row}:${col}`);
+        return { rows: val !== undefined ? [{ value_text: val }] : [] };
+      }
+      if (s.includes("SELECT row_id FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id LIKE $3 AND column_id = 'order_id'")) {
+        const [tenant, wb, rowPattern] = params;
+        const prefix = `${tenant}:${wb}:`;
+        const likePrefix = String(rowPattern).replace(/%$/, '');
+        const rowIds = new Set();
+        for (const key of cellsMap.keys()) {
+          if (!key.startsWith(prefix)) continue;
+          const suffix = key.slice(prefix.length);
+          const lastSeparator = suffix.lastIndexOf(':');
+          const rowId = suffix.slice(0, lastSeparator);
+          const columnId = suffix.slice(lastSeparator + 1);
+          if (columnId === 'order_id' && rowId.startsWith(likePrefix)) {
+            rowIds.add(rowId);
+          }
+        }
+        return { rows: Array.from(rowIds).map((row_id) => ({ row_id })) };
+      }
+      if (s.includes('SELECT command_status')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const handlersMap = new Map([
+    ['salesOrder.create', new SalesOrderCreateHandler()],
+    ['salesOrder.confirm', new SalesOrderConfirmHandler()],
+    ['fulfillment.allocate', new FulfillmentAllocateHandler()],
+  ]);
+
+  const processor = new CommandProcessor(mockDb, handlersMap);
+
+  const createResult = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-so-create-neg',
+    commandType: 'salesOrder.create',
+    payload: {
+      orderId: 'SO-NEG',
+      customerId: 'CUST-NEG',
+      lines: [{ productId: 'PROD-001', qty: 3, unit_price: '12.00' }],
+    },
+    workbookId: '00000000-0000-0000-0000-000000000015'
+  }, null, null, '00000000-0000-0000-0000-000000000015');
+  assert.equal(createResult.status, 'committed');
+
+  const confirmResult = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-so-confirm-neg',
+    commandType: 'salesOrder.confirm',
+    payload: { orderId: 'SO-NEG' },
+    workbookId: '00000000-0000-0000-0000-000000000015'
+  }, null, null, '00000000-0000-0000-0000-000000000015');
+  assert.equal(confirmResult.status, 'committed');
+
+  const allocateResult = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-so-alloc-neg',
+    commandType: 'fulfillment.allocate',
+    payload: {
+      orderId: 'SO-NEG',
+      lines: [{ lineId: '1', productId: 'PROD-001', warehouseId: 'w1', qty: 3 }],
+    },
+    workbookId: '00000000-0000-0000-0000-000000000015'
+  }, null, null, '00000000-0000-0000-0000-000000000015');
+
+  assert.equal(allocateResult.status, 'failed');
+  assert.match(String(allocateResult.problem?.message || ''), /INSUFFICIENT_AVAILABLE_STOCK/);
+});
+

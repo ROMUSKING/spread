@@ -4,7 +4,7 @@
 **Title:** Audit of Existing Business Applications (View Presets) and Design of Most Commonly Used Ones for SME Online Ecommerce with Own Warehouse  
 **Version:** 0.17.0  
 **Date:** 2026-06-28  
-**Status:** Draft  
+**Status:** Approved  
 **Related:** 
 - `docs/data/sme-ecommerce-domain-model-and-business-logic-spec.md`
 - `docs/data/sme-ecommerce-business-logic-and-tile-views-spec.md`
