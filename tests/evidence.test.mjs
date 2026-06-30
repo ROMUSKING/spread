@@ -1973,3 +1973,81 @@ test('ci://tests/domain/extended-master-data-handlers', async () => {
   assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000025:SUPP-party1:lead_time_days'), '5');
 });
 
+test('salesOrder.confirm transitions a draft order to confirmed', async () => {
+  const {
+    SalesOrderCreateHandler,
+    SalesOrderConfirmHandler,
+  } = await import('../apps/api/src/commands/handlers/SalesHandlers.ts');
+
+  const cellsMap = new Map();
+  const mockDb = {
+    query: async (sql, params) => {
+      const s = sql.trim().replace(/\s+/g, ' ');
+      if (s.includes('INSERT INTO current_cell_values')) {
+        const [tenant, wb, row, col, val] = params;
+        cellsMap.set(`${tenant}:${wb}:${row}:${col}`, val);
+        return { rows: [] };
+      }
+      if (s.includes('SELECT value_text FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id = $3 AND column_id = $4')) {
+        const [tenant, wb, row, col] = params;
+        const val = cellsMap.get(`${tenant}:${wb}:${row}:${col}`);
+        return { rows: val !== undefined ? [{ value_text: val }] : [] };
+      }
+      if (s.includes("SELECT row_id FROM current_cell_values WHERE tenant_id = $1 AND workbook_id = $2 AND row_id LIKE $3 AND column_id = 'order_id'")) {
+        const [tenant, wb, rowPattern] = params;
+        const prefix = `${tenant}:${wb}:`;
+        const likePrefix = String(rowPattern).replace(/%$/, '');
+        const rowIds = new Set();
+        for (const key of cellsMap.keys()) {
+          if (!key.startsWith(prefix)) continue;
+          const suffix = key.slice(prefix.length);
+          const lastSeparator = suffix.lastIndexOf(':');
+          const rowId = suffix.slice(0, lastSeparator);
+          const columnId = suffix.slice(lastSeparator + 1);
+          if (columnId === 'order_id' && rowId.startsWith(likePrefix)) {
+            rowIds.add(rowId);
+          }
+        }
+        return { rows: Array.from(rowIds).map((row_id) => ({ row_id })) };
+      }
+      if (s.includes('SELECT command_status')) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    }
+  };
+
+  const handlersMap = new Map([
+    ['salesOrder.create', new SalesOrderCreateHandler()],
+    ['salesOrder.confirm', new SalesOrderConfirmHandler()],
+  ]);
+
+  const processor = new CommandProcessor(mockDb, handlersMap);
+
+  const createResult = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-so-create',
+    commandType: 'salesOrder.create',
+    payload: {
+      orderId: 'SO-001',
+      customerId: 'CUST-001',
+      lines: [{ productId: 'PROD-001', qty: 2, unit_price: '10.00' }],
+    },
+    workbookId: '00000000-0000-0000-0000-000000000015'
+  }, null, null, '00000000-0000-0000-0000-000000000015');
+  assert.equal(createResult.status, 'committed');
+
+  const confirmResult = await processor.processCommand('t1', 'u1', {
+    commandId: 'cmd-so-confirm',
+    commandType: 'salesOrder.confirm',
+    payload: {
+      orderId: 'SO-001',
+    },
+    workbookId: '00000000-0000-0000-0000-000000000015'
+  }, null, null, '00000000-0000-0000-0000-000000000015');
+
+  assert.equal(confirmResult.status, 'committed');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000015:SO-001-HDR:status'), 'CONFIRMED');
+  assert.equal(cellsMap.get('t1:00000000-0000-0000-0000-000000000015:SO-001-L1:status'), 'CONFIRMED');
+  assert.ok(cellsMap.get('t1:00000000-0000-0000-0000-000000000015:SO-001-HDR:confirmed_at'));
+});
+

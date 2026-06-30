@@ -28,7 +28,14 @@ import {
   InventoryAdjustHandler,
   ProductCreateHandler,
 } from './commands/handlers/InventoryHandlers';
-import { SalesOrderCreateHandler } from './commands/handlers/SalesHandlers';
+import {
+  PurchaseOrderCreateHandler,
+  PurchaseOrderReceiveHandler,
+} from './commands/handlers/PurchaseHandlers';
+import {
+  SalesOrderConfirmHandler,
+  SalesOrderCreateHandler,
+} from './commands/handlers/SalesHandlers';
 import {
   ProductTemplateCreateHandler,
   ProductVariantCreateHandler,
@@ -218,6 +225,9 @@ export async function startApi(): Promise<void> {
   handlers.set('inventory.adjust', new InventoryAdjustHandler());
   handlers.set('product.create', new ProductCreateHandler());
   handlers.set('salesOrder.create', new SalesOrderCreateHandler());
+  handlers.set('salesOrder.confirm', new SalesOrderConfirmHandler());
+  handlers.set('purchaseOrder.create', new PurchaseOrderCreateHandler());
+  handlers.set('purchaseOrder.receive', new PurchaseOrderReceiveHandler());
   // Extended master data handlers
   handlers.set('productTemplate.create', new ProductTemplateCreateHandler());
   handlers.set('productVariant.create', new ProductVariantCreateHandler());

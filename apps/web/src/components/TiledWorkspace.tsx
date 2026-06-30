@@ -1,4 +1,15 @@
 import { useState } from "react";
+import {
+  BusinessCommandCenter,
+  type BusinessActionStatusMap,
+  type InventoryAdjustInput,
+  type PartyCreateInput,
+  type ProductCreateInput,
+  type PurchaseOrderCreateInput,
+  type PurchaseOrderReceiveInput,
+  type SalesOrderConfirmInput,
+  type SalesOrderCreateInput,
+} from "./BusinessCommandCenter";
 import { SpreadsheetGrid, type GridRow, type GridColumn, type CommandState } from "./SpreadsheetGrid";
 import { ExplorerPanel, type WorkspaceNode, type WorkspaceEdge } from "./ExplorerPanel";
 import { WorkbookGraph } from "./WorkbookGraph";
@@ -6,13 +17,14 @@ import { TransposedDetail } from "./TransposedDetail";
 
 export interface TileState {
   id: string;
-  type: "grid" | "detail" | "explorer" | "graph";
+  type: "grid" | "detail" | "explorer" | "graph" | "actions";
   workbookId: string;
   selectedRowId?: string | null;
   gridArea?: string;
 }
 
 const TILE_VIEW_LABELS: Record<TileState["type"], string> = {
+  actions: "Actions",
   explorer: "Navigator",
   grid: "Grid",
   graph: "Relations",
@@ -32,7 +44,8 @@ const VIEW_PRESETS: ViewPreset[] = [
     tiles: [
       { id: "tile-preset-md-1", type: "explorer", workbookId: "00000000-0000-0000-0000-000000000021" },
       { id: "tile-preset-md-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000021" },
-      { id: "tile-preset-md-3", type: "graph", workbookId: "00000000-0000-0000-0000-000000000021" },
+      { id: "tile-preset-md-3", type: "actions", workbookId: "00000000-0000-0000-0000-000000000021" },
+      { id: "tile-preset-md-4", type: "graph", workbookId: "00000000-0000-0000-0000-000000000021" },
     ]
   },
   {
@@ -41,7 +54,8 @@ const VIEW_PRESETS: ViewPreset[] = [
     tiles: [
       { id: "tile-preset-so-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000015", gridArea: "1 / 1 / 2 / 2" },
       { id: "tile-preset-so-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000014", gridArea: "2 / 1 / 3 / 2" },
-      { id: "tile-preset-so-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000015", gridArea: "1 / 2 / 3 / 3" },
+      { id: "tile-preset-so-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000015", gridArea: "1 / 2 / 2 / 3" },
+      { id: "tile-preset-so-4", type: "actions", workbookId: "00000000-0000-0000-0000-000000000015", gridArea: "2 / 2 / 3 / 3" },
     ]
   },
   {
@@ -49,7 +63,8 @@ const VIEW_PRESETS: ViewPreset[] = [
     layout: "row",
     tiles: [
       { id: "tile-preset-wh-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000014" },
-      { id: "tile-preset-wh-2", type: "graph", workbookId: "00000000-0000-0000-0000-000000000014" },
+      { id: "tile-preset-wh-2", type: "actions", workbookId: "00000000-0000-0000-0000-000000000014" },
+      { id: "tile-preset-wh-3", type: "graph", workbookId: "00000000-0000-0000-0000-000000000014" },
     ]
   },
   {
@@ -59,6 +74,7 @@ const VIEW_PRESETS: ViewPreset[] = [
       { id: "tile-preset-po-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000016" },
       { id: "tile-preset-po-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000025" },
       { id: "tile-preset-po-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000016" },
+      { id: "tile-preset-po-4", type: "actions", workbookId: "00000000-0000-0000-0000-000000000016" },
     ]
   },
   {
@@ -68,7 +84,8 @@ const VIEW_PRESETS: ViewPreset[] = [
       { id: "tile-preset-cust-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000011" },
       { id: "tile-preset-cust-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000026" },
       { id: "tile-preset-cust-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000011" },
-      { id: "tile-preset-cust-4", type: "graph", workbookId: "00000000-0000-0000-0000-000000000011" },
+      { id: "tile-preset-cust-4", type: "actions", workbookId: "00000000-0000-0000-0000-000000000011" },
+      { id: "tile-preset-cust-5", type: "graph", workbookId: "00000000-0000-0000-0000-000000000011" },
     ]
   },
   {
@@ -109,6 +126,14 @@ interface TiledWorkspaceProps {
   onAddEdge: (source: string, target: string, label: string) => void;
   getColumnWidth?: (workbookId: string, columnId: string) => number | undefined;
   onColumnWidthChange?: (workbookId: string, columnId: string, width: number) => void;
+  businessActionStatuses: BusinessActionStatusMap;
+  onCreateProduct: (input: ProductCreateInput) => Promise<boolean>;
+  onAdjustInventory: (input: InventoryAdjustInput) => Promise<boolean>;
+  onCreateSalesOrder: (input: SalesOrderCreateInput) => Promise<boolean>;
+  onConfirmSalesOrder: (input: SalesOrderConfirmInput) => Promise<boolean>;
+  onCreatePurchaseOrder: (input: PurchaseOrderCreateInput) => Promise<boolean>;
+  onReceivePurchaseOrder: (input: PurchaseOrderReceiveInput) => Promise<boolean>;
+  onCreateParty: (input: PartyCreateInput) => Promise<boolean>;
 }
 
 export function TiledWorkspace({
@@ -127,6 +152,14 @@ export function TiledWorkspace({
   onAddEdge,
   getColumnWidth,
   onColumnWidthChange,
+  businessActionStatuses,
+  onCreateProduct,
+  onAdjustInventory,
+  onCreateSalesOrder,
+  onConfirmSalesOrder,
+  onCreatePurchaseOrder,
+  onReceivePurchaseOrder,
+  onCreateParty,
 }: TiledWorkspaceProps) {
   const [tiles, setTiles] = useState<TileState[]>([
     { id: "tile-1", type: "explorer", workbookId: "00000000-0000-0000-0000-000000000002" },
@@ -172,7 +205,7 @@ export function TiledWorkspace({
     if (!allowedWorkbookIds.includes(targetWbId)) return;
     setTiles((prev) =>
       prev.map((t) => {
-        if (t.type === "grid" || t.type === "detail") {
+        if (t.type === "grid" || t.type === "detail" || t.type === "actions") {
           return { ...t, workbookId: targetWbId, selectedRowId: null };
         }
         return t;
@@ -271,7 +304,7 @@ export function TiledWorkspace({
                     ))}
                   </select>
 
-                  {(tile.type === "grid" || tile.type === "detail") && (
+                  {(tile.type === "grid" || tile.type === "detail" || tile.type === "actions") && (
                     <select
                       className="select"
                       value={tile.workbookId}
@@ -375,6 +408,20 @@ export function TiledWorkspace({
                     workbookId={tile.workbookId}
                     onCellEdit={(rowId, colId, val) => onCellEdit(tile.workbookId, rowId, colId, val)}
                     commandStates={commandStates}
+                  />
+                )}
+
+                {tile.type === "actions" && (
+                  <BusinessCommandCenter
+                    activeWorkbookId={tile.workbookId}
+                    statuses={businessActionStatuses}
+                    onCreateProduct={onCreateProduct}
+                    onAdjustInventory={onAdjustInventory}
+                    onCreateSalesOrder={onCreateSalesOrder}
+                    onConfirmSalesOrder={onConfirmSalesOrder}
+                    onCreatePurchaseOrder={onCreatePurchaseOrder}
+                    onReceivePurchaseOrder={onReceivePurchaseOrder}
+                    onCreateParty={onCreateParty}
                   />
                 )}
               </div>

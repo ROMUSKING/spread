@@ -3,7 +3,7 @@
 **Document ID:** SPEC-DOMAIN-ECOM-WH-001  
 **Title:** Spreadsheet-Native ERP v0.17.0 Phase 0 — Data Tables/Workbooks and Business Logic Applications for Basic SME Ecommerce with Owned Warehouse  
 **Author:** (Systems Architect / AI Agent)  
-**Date:** 2026-06-27  
+**Date:** 2026-06-30  
 **Version:** 0.17.0  
 **Status:** Approved  
 **Scope:** Phase 0 runtime only (command_api + handlers, durable outbox polling, current_cell_values storage, PostgresMvpNumericLedgerAdapter, `compilePartitions` from BatchPartitionCompiler policy module, RetrievalRevalidator path for derived)  
@@ -33,12 +33,15 @@
 - Critical review & UX alternatives: `docs/data/sme-ecommerce-schema-critical-review-and-ux-alternatives.md` (recommended refinements for column metadata, action integration, cross-tile reactivity, grouped rendering, bypass mitigations)  
 - `apps/api/src/commands/CommandProcessor.ts` (Boundary A claim + Boundary B tx with ledger + outbox insert + command status)  
 - `apps/api/src/server.ts` (demo handlers for 'cell.update'/'row.delete', ALLOWED_WORKBOOKS, workbook query via current_cell_values, registration)  
+- `apps/api/src/commands/handlers/SalesHandlers.ts` (current `salesOrder.create` + `salesOrder.confirm` implementation surface)
+- `apps/api/src/commands/handlers/PurchaseHandlers.ts` (current `purchaseOrder.create` + `purchaseOrder.receive` implementation surface)
 - `apps/api/src/routes/commands.ts`  
 - `apps/api/src/outbox/OutboxRepository.ts` (insertEvent in tx, deterministic event_id/idempotency_key)  
 - `packages/contracts/src/command-api.ts` (SubmitCommandRequest with workbookId)  
 - `packages/contracts/src/events.ts` (OutboxEnvelope, InsertOutboxEventParams)  
 - `packages/db/src/transaction.ts` (withTransaction, TransactionClient)  
 - `apps/web/src/lib/commandClient.ts` (submitCommand, polling)  
+- `apps/web/src/components/BusinessCommandCenter.tsx` (business-actions tile for domain command entry)
 - `apps/web/src/lib/workbookConstants.ts` (ALLOWED_WORKBOOKS allowlist definition + isAllowedWorkbook)
 - `apps/web/src/lib/workbookUtils.ts` (uses it for resolve/assert)
 - `apps/web/src/app/page.tsx` (imports + multiple uses for tabs/SSE/nav)
@@ -88,7 +91,7 @@ Current state (verified via source):
 - Fragile linking (string names, no stable ids) is explicitly called out as risk in pilot and relations graph (`docs/ui/...`, `ExplorerPanel`, `WorkbookGraph`).
 - `pilot-dataset-definition.md` explicitly envisions Product/Warehouse/StockBalance/StockReservation + editable projection `Available = onhand - reserved`.
 - Ledgerability: stock on-hand, reservations are ledgerable (conserved quantities with debit/credit accounts); prices/tax rates/config are not (`docs/data/ledgerability-classification.md:30-50`, `numeric-ledger-contract.md:280-290` stock status accounts).
-- Existing commands limited to primitives: `'cell.update'`, `'row.delete'`, graph add (demo in `server.ts:49-170`); handlers write directly to `current_cell_values` + demo ledger transfer.
+- Primitive commands (`cell.update`, `row.delete`, graph add) still exist for the bootstrap vertical slice, but API handlers now also implement `product.create`, `inventory.adjust`, `salesOrder.create`, `salesOrder.confirm`, `purchaseOrder.create`, `purchaseOrder.receive`, and the extended master-data command set. The web shell exposes a business-actions tile for these domain flows while keeping all writes on `command_api`.
 - Batch policy example at `workbooks/inventory/batch-partition-policy.yml` already uses `productId` + `warehouseId` partitionKeys (perfect for inventory synergy).
 - Command tx guarantees (docs/dev/command-lifecycle.md:20-50): single PG tx with ledger + current + audit + domain + outbox + terminal status. No blind retries; status polling recovery.
 - UI: module switcher between workbooks, dynamic column discovery, SSE subscription per workbookId, optimistic status.
@@ -102,6 +105,25 @@ Pain points addressed:
 - No path for user extension (add columns) while protecting rules.
 
 This spec closes the gap for "basic SME business operations" while respecting every Phase 0 boundary.
+
+## Implemented Phase 0 Command Surface
+
+As of 2026-06-30, the current repository implementation covers these domain commands in addition to the primitive grid/graph commands:
+
+- `product.create`
+- `inventory.adjust`
+- `salesOrder.create`
+- `salesOrder.confirm`
+- `purchaseOrder.create`
+- `purchaseOrder.receive`
+- `productTemplate.create`
+- `productVariant.create`
+- `party.create`
+- `customer.create`
+- `supplier.create`
+- `address.create`
+
+Allocation, fulfillment, invoicing, payment, and returns remain specified here but are still follow-on implementation slices.
 
 ---
 
@@ -241,7 +263,7 @@ These are enforced in evidence tests and validate-invariants runs. Demo handlers
 3. `warehouse.create`.  
 4. `inventory.adjust` (or `inventory.receive` / `cycleCount`) — payload {productId, warehouseId, delta, reason, effectiveAt}. Handler: read current (or compute), write cells for on_hand, createTransfer on stock ledger (debit available account, credit adjustment). Enforce non-neg via ledger constraint or precheck.  
 5. `salesOrder.create` — payload header + lines[]. Handler: generate order_id, for each line write cells (row_id e.g. `${orderId}-L${i}`), validate products, compute totals (write line_total cells). Optional initial reserve. Outbox: 'salesOrder.created'.  
-6. `salesOrder.confirm` — transition status cell(s), trigger allocation/reserve.  
+6. `salesOrder.confirm` — implemented in the current slice as the DRAFT → CONFIRMED status transition for the order header plus all order lines; allocation/reserve remains a separate follow-on command.  
 7. `fulfillment.allocate` (or reserve) — {orderId, lines or all}. Compute available via cells or ledger projection. Write reservations (cells + ledger pending/reserved transfer). Batch partition groups by product+warehouse. Outbox 'stock.reserved', 'order.allocated'.  
 8. `order.fulfillShip` (pick/pack/ship) — move reserved->shipped cells + ledger transfers (available/reserved -> shipped status accounts). Write fulfillment row/cells. Update order status. Ledger: COGS effect (inventory asset credit, expense debit) + AR if invoiced.  
 9. `purchaseOrder.create` / `purchaseOrder.receive` — on receive: increase on_hand (cells + stock ledger transfer), basic 3-way match (see pseudocode: qty within +/-5% of PO or flag variance; price exact or variance; partials allowed with flag; post only on match-or-accepted).  
@@ -266,6 +288,11 @@ export interface SalesOrderCreatePayload {
     taxRate?: string;   // from product or override
   }>;
   // no orderId: generated or provided for idempotent re-drive
+
+export interface SalesOrderConfirmPayload {
+  orderId: string;
+  lineIds?: string[];
+}
 }
 
 export interface FulfillmentAllocatePayload {
@@ -347,6 +374,30 @@ async executeBusinessLogic(
   // write order-HDR summary row if desired
   // no ledger here (reserve on allocate)
   return {orderId};
+}
+
+// salesOrder.confirm (implemented; confirm all or selected order lines)
+async executeBusinessLogic(
+  envelope: CommandEnvelope<SalesOrderConfirmPayload>,
+  context: CommandExecutionContext,
+): Promise<{orderId: string; linesConfirmed: number; status: string}> {
+  const { orderId, lineIds } = envelope.payload;
+  const hdrRow = `${orderId}-HDR`;
+  const currentStatus = await queryCell(soWb, hdrRow, 'status');
+  if (!currentStatus) throw new Error('ORDER_NOT_FOUND');
+  if (!['DRAFT', 'CONFIRMED'].includes(currentStatus)) {
+    throw new Error('INVALID_STATUS_TRANSITION');
+  }
+  const targetRows = lineIds?.length
+    ? lineIds.map((lineId) => `${orderId}-L${lineId}`)
+    : await queryOrderLineRows(orderId);
+  for (const rowId of targetRows) {
+    await writeCell(..., rowId, 'status', 'CONFIRMED');
+    await writeCell(..., rowId, 'confirmed_at', nowIso);
+  }
+  await writeCell(..., hdrRow, 'status', 'CONFIRMED');
+  await writeCell(..., hdrRow, 'confirmed_at', nowIso);
+  return { orderId, linesConfirmed: targetRows.length, status: 'CONFIRMED' };
 }
 
 // fulfillment.allocate (uses batch policy grouping; ledger reserve)
@@ -431,6 +482,8 @@ async executeBusinessLogic(envelope: CommandEnvelope<InventoryReturnReceiptPaylo
 **Workflow state machine (example for Sales Order):**  
 DRAFT (create) → CONFIRMED (confirm cmd) → ALLOCATED (allocate cmd, reserves posted) → SHIPPED (fulfillShip) → INVOICED (invoice) → CLOSED.  
 Transitions enforced in handler: query current status cells, reject invalid, write new status + side effects atomically. Status stored as column value (visible/editable with care in grid; domain cmds drive it).
+
+Current implemented transition coverage includes `salesOrder.confirm` for DRAFT → CONFIRMED and `purchaseOrder.receive` for PO lines/header moving to PARTIAL or RECEIVED. Allocation, shipment, invoicing, and returns remain follow-on slices.
 
 **Ledger account patterns (examples, per contract):**  
 Stock ledger (code 1 or tenant SKU-derived):  
