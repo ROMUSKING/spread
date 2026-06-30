@@ -60,6 +60,36 @@ const VIEW_PRESETS: ViewPreset[] = [
       { id: "tile-preset-po-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000025" },
       { id: "tile-preset-po-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000016" },
     ]
+  },
+  {
+    name: "Customer Management",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-cust-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000011" },
+      { id: "tile-preset-cust-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000026" },
+      { id: "tile-preset-cust-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000011" },
+      { id: "tile-preset-cust-4", type: "graph", workbookId: "00000000-0000-0000-0000-000000000011" },
+    ]
+  },
+  {
+    name: "Returns Management",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-ret-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000017" },
+      { id: "tile-preset-ret-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000015" },
+      { id: "tile-preset-ret-3", type: "grid", workbookId: "00000000-0000-0000-0000-000000000014" },
+      { id: "tile-preset-ret-4", type: "detail", workbookId: "00000000-0000-0000-0000-000000000017" },
+    ]
+  },
+  {
+    name: "Financials & Invoicing",
+    layout: "row",
+    tiles: [
+      { id: "tile-preset-fin-1", type: "grid", workbookId: "00000000-0000-0000-0000-000000000004" },
+      { id: "tile-preset-fin-2", type: "grid", workbookId: "00000000-0000-0000-0000-000000000015" },
+      { id: "tile-preset-fin-3", type: "detail", workbookId: "00000000-0000-0000-0000-000000000004" },
+      { id: "tile-preset-fin-4", type: "graph", workbookId: "00000000-0000-0000-0000-000000000004" },
+    ]
   }
 ];
 
