@@ -35,7 +35,7 @@ P0-EXEC-001 is green for the runnable bootstrap baseline once `docs/qa/bootstrap
 8. Agent work orders must not admit TigerBeetle, pgvector, DuckDB, broker/CDC, connector runtime, full UI tiling, or external APIs into the Phase 0 edit path.
 9. Every agent PR must run `scripts/validate-pack.sh` before handoff.
 10. Reviewer checklist must reject command bypass, outbox bypass, secret leakage, direct external writes, direct TigerBeetle writes, and unrevalidated derived-plane output.
-11. `SNAP-001` requires `docs/snapshot-v0.17.0.md` to exist, is referenced by README and pack-index, and is the first-read artifact for agents and humans. `SNAP-002` requires README and pack-index to begin with a START HERE snapshot entrypoint.
+11. `SNAP-001` requires `docs/snapshot-v0.18.0.md` to exist, is referenced by README and pack-index, and is the first-read artifact for agents and humans. `SNAP-002` requires README and pack-index to begin with a START HERE snapshot entrypoint.
 12. Code work orders that touch covered domains must start from `docs/skeletons/` reference skeletons.
 13. Validation waiver mode is documented and limited to non-release-blocking warnings with a decision-waiver-log entry.
 14. `docs/qa/agent-simulation-test.md` defines bad-agent-PR rejection tests.

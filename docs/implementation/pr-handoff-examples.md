@@ -16,7 +16,7 @@
 Adds command_log migration and command-id reuse conflict test. Does not expose editable cells yet.
 
 ## Canonical docs read
-- docs/snapshot-v0.17.0.md
+- docs/snapshot-v0.18.0.md
 - docs/dev/command-lifecycle.md
 - docs/data/command-outbox-retention-partitioning.md
 - apps/api/src/commands/CommandHandlerBase.ts

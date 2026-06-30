@@ -11,10 +11,10 @@
 
 **Mandatory prerequisite reads (verified):**  
 - `AGENTS.md` (non-negotiable boundaries)  
-- `docs/snapshot-v0.17.0.md`  
+- `docs/snapshot-v0.18.0.md`  
 - `docs/implementation/phase0-agent-work-orders.md` (esp. AGENT-012, AGENT-040, AGENT-090)  
 - `docs/implementation/project-directory-structure.md`  
-- `spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md`  
+- `spec/spreadsheet_native_erp_technical_spec_v0_18_0_research_driven_phase0_ui_ux_audit_complete_execution.md`  
 - `docs/data/pilot-dataset-definition.md` (envisioned Product, Warehouse, StockBalance, StockReservation)  
 - `docs/data/ledgerability-classification.md`  
 - `docs/data/numeric-ledger-contract.md` (MVP schema + stock modeling rule)  

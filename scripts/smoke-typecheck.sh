@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-printf 'TypeScript smoke typecheck for Spreadsheet-Native ERP v0.17.0\n'
+printf 'TypeScript smoke typecheck for Spreadsheet-Native ERP v0.18.0\n'
 
 TSC_CMD=()
 if [[ -x "node_modules/.bin/tsc" ]]; then

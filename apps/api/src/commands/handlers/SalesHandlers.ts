@@ -1,4 +1,5 @@
 import type { CommandEnvelope } from '@erp/domain/commands/types';
+import { withAffectsWorkbooks } from '@erp/contracts/outbox-refresh';
 import { CommandHandlerBase } from '../CommandHandlerBase';
 import type { CommandExecutionContext } from '../CommandHandlerBase';
 
@@ -266,14 +267,14 @@ export class SalesOrderConfirmHandler extends CommandHandlerBase<
 
 export class FulfillmentAllocateHandler extends CommandHandlerBase<
   FulfillmentAllocatePayload,
-  { orderId: string; linesAllocated: number; status: string }
+  { orderId: string; linesAllocated: number; status: string; affects_workbooks?: string[] }
 > {
   readonly commandType = 'fulfillment.allocate';
 
   async executeBusinessLogic(
     envelope: CommandEnvelope<FulfillmentAllocatePayload>,
     context: CommandExecutionContext,
-  ): Promise<{ orderId: string; linesAllocated: number; status: string }> {
+  ): Promise<{ orderId: string; linesAllocated: number; status: string; affects_workbooks?: string[] }> {
     const { orderId, lines } = envelope.payload;
     const tenantId = envelope.tenantId;
     const workbookId = envelope.workbookId || SALES_ORDERS_WORKBOOK_ID;
@@ -514,11 +515,15 @@ export class FulfillmentAllocateHandler extends CommandHandlerBase<
       allocatedAt,
     );
 
-    return {
-      orderId,
-      linesAllocated: lines.length,
-      status: nextHeaderStatus,
-    };
+    return withAffectsWorkbooks(
+      {
+        orderId,
+        linesAllocated: lines.length,
+        status: nextHeaderStatus,
+      },
+      [workbookId, INVENTORY_BALANCES_WORKBOOK_ID],
+      workbookId,
+    );
   }
 }
 
@@ -535,14 +540,14 @@ export type OrderFulfillShipPayload = {
 
 export class OrderFulfillShipHandler extends CommandHandlerBase<
   OrderFulfillShipPayload,
-  { orderId: string; linesShipped: number; status: string; fulfillmentId?: string }
+  { orderId: string; linesShipped: number; status: string; fulfillmentId?: string; affects_workbooks?: string[] }
 > {
   readonly commandType = 'order.fulfillShip';
 
   async executeBusinessLogic(
     envelope: CommandEnvelope<OrderFulfillShipPayload>,
     context: CommandExecutionContext,
-  ): Promise<{ orderId: string; linesShipped: number; status: string; fulfillmentId?: string }> {
+  ): Promise<{ orderId: string; linesShipped: number; status: string; fulfillmentId?: string; affects_workbooks?: string[] }> {
     const { orderId, fulfillmentId, lines } = envelope.payload;
     const tenantId = envelope.tenantId;
     const workbookId = envelope.workbookId || SALES_ORDERS_WORKBOOK_ID;
@@ -831,12 +836,16 @@ export class OrderFulfillShipHandler extends CommandHandlerBase<
       shippedAt,
     );
 
-    return {
-      orderId,
-      linesShipped: lines.length,
-      status: nextHeaderStatus,
-      fulfillmentId: resolvedFulfillmentId,
-    };
+    return withAffectsWorkbooks(
+      {
+        orderId,
+        linesShipped: lines.length,
+        status: nextHeaderStatus,
+        fulfillmentId: resolvedFulfillmentId,
+      },
+      [workbookId, INVENTORY_BALANCES_WORKBOOK_ID],
+      workbookId,
+    );
   }
 }
 

@@ -10,7 +10,7 @@ test("@erp/config package metadata is coherent", () => {
   assert.equal(pkg.name, "@erp/config");
   assert.equal(pkg.private, true);
   assert.equal(pkg.type, "module");
-  assert.equal(pkg.version, "0.17.1");
+  assert.equal(pkg.version, "0.18.0");
 });
 
 test("@erp/config required bootstrap source stub exists", () => {

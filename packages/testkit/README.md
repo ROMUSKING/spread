@@ -8,7 +8,7 @@ This package is part of the TypeScript-first Phase 0 monorepo skeleton. Implemen
 Canonical guidance:
 
 ```text
-docs/snapshot-v0.17.0.md
+docs/snapshot-v0.18.0.md
 AGENTS.md
 docs/implementation/phase0-agent-work-orders.md
 ```

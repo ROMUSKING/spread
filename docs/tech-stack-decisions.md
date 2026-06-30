@@ -1,6 +1,6 @@
 # Tech Stack and Repository Shape Snapshot
 
-**Version:** 0.17.0  
+**Version:** 0.18.0  
 **Status:** Provisional Phase 0 implementation baseline; update by ADR if changed  
 **Purpose:** Give AI coding agents a concrete repository shape and implementation substrate before code is generated.
 
@@ -33,7 +33,7 @@ repo/
 | Runtime | Node.js | Use worker threads only for formula-worker spike. |
 | Package manager | pnpm workspace | Lockfile required in implementation repo. |
 | API service | HTTP server with typed command handlers | Framework may be Fastify, Hono, or equivalent; command/outbox contracts matter more than framework. |
-| UI | React-based grid shell | Use grid dependency DAR before committing to a grid library. |
+| UI | React-based grid shell | Hybrid DAR in progress: react-window main path + Glide POC per `docs/adr/ADR-0028-grid-engine-dar.md`. |
 | Client state | query/cache layer plus explicit command-status state | Do not hide command ambiguity behind optimistic cache. |
 | Database | PostgreSQL | Operational control plane, command log, outbox, projections, integration staging. |
 | Testing | unit + integration + e2e + property/fuzz where required | Every evidence URI must map to a test or benchmark job. |
@@ -47,7 +47,17 @@ No pgvector runtime in Phase 0.
 No DuckDB runtime in Phase 0.
 No broker/CDC dependency in Phase 0.
 No external connector runtime in the ordinary edit path.
-No full tiling workspace before vertical slice completion.
+No full tiling workspace runtime before P1-UX-001 evidence (preview scaffolding allowed).
+```
+
+## Grid engine DAR (v0.18.0)
+
+```text
+ADR: docs/adr/ADR-0028-grid-engine-dar.md
+Work order: AGENT-064
+Fallback: react-window virtualization in SpreadsheetGrid
+POC: Glide Data Grid branch with onCellEdited -> cell.update wiring
+Benchmark gate: BENCH-UX-001
 ```
 
 ## Code skeleton starting points

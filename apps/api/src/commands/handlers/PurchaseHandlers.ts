@@ -1,4 +1,5 @@
 import type { CommandEnvelope } from '@erp/domain/commands/types';
+import { withAffectsWorkbooks } from '@erp/contracts/outbox-refresh';
 import { CommandHandlerBase } from '../CommandHandlerBase';
 import type { CommandExecutionContext } from '../CommandHandlerBase';
 
@@ -143,6 +144,7 @@ export class PurchaseOrderReceiveHandler extends CommandHandlerBase<
     receiptId: string;
     linesReceived: number;
     headerStatus: string;
+    affects_workbooks?: string[];
   }
 > {
   readonly commandType = 'purchaseOrder.receive';
@@ -155,6 +157,7 @@ export class PurchaseOrderReceiveHandler extends CommandHandlerBase<
     receiptId: string;
     linesReceived: number;
     headerStatus: string;
+    affects_workbooks?: string[];
   }> {
     const { poId, receiptId, lines } = envelope.payload;
     const tenantId = envelope.tenantId;
@@ -386,11 +389,15 @@ export class PurchaseOrderReceiveHandler extends CommandHandlerBase<
       resolvedReceiptId,
     );
 
-    return {
-      poId,
-      receiptId: resolvedReceiptId,
-      linesReceived: lines.length,
-      headerStatus,
-    };
+    return withAffectsWorkbooks(
+      {
+        poId,
+        receiptId: resolvedReceiptId,
+        linesReceived: lines.length,
+        headerStatus,
+      },
+      [purchaseWorkbookId, INVENTORY_BALANCES_WORKBOOK_ID],
+      purchaseWorkbookId,
+    );
   }
 }

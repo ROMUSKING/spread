@@ -1,19 +1,19 @@
-# AI Coding Agent Instructions — Spreadsheet-Native ERP v0.17.1
+# AI Coding Agent Instructions — Spreadsheet-Native ERP v0.18.0
 
-**Version:** 0.17.1  
+**Version:** 0.18.0  
 **Status:** Active repository-smoke implementation baseline  
-**First read:** `docs/snapshot-v0.17.0.md`
+**First read:** `docs/snapshot-v0.18.0.md`
 
 ## Mandatory first step
 
-Before implementation, confirm you have read `docs/snapshot-v0.17.0.md`. The “What agents may NOT do today” checklist is a stop-condition list, not guidance.
+Before implementation, confirm you have read `docs/snapshot-v0.18.0.md`. The “What agents may NOT do today” checklist is a stop-condition list, not guidance.
 
 ## Non-negotiable boundaries
 
 ```text
 - All mutations go through command_api and command handlers.
 - Durable outbox polling remains the default live-update path.
-- No TigerBeetle, pgvector, DuckDB, broker/CDC, external connector runtime, or full tiled workspace in Phase 0 edit path.
+- No TigerBeetle, pgvector, DuckDB, broker/CDC, external connector runtime, or full tiled workspace runtime in Phase 0 edit path.
 - Do not create or alter DDL outside canonical data-contract files.
 - Do not bypass RetrievalRevalidator for derived-plane results.
 - Run validation and smoke typecheck before handoff.
@@ -31,12 +31,13 @@ bash scripts/smoke-package-tests.sh
 
 | Purpose | Path |
 |---|---|
-| Architecture snapshot | `docs/snapshot-v0.17.0.md` |
+| Architecture snapshot | `docs/snapshot-v0.18.0.md` |
 | Phase 0 work orders | `docs/implementation/phase0-agent-work-orders.md` |
+| UI/UX specification | `docs/ui/spreadsheet-native-ux-specification.md` |
 | Project structure | `docs/implementation/project-directory-structure.md` |
 | Stub index | `docs/implementation/code-stub-index.md` |
 | Command handler skeleton | `apps/api/src/commands/CommandHandlerBase.ts` |
-| Active spec | `spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md` |
+| Active spec | `spec/spreadsheet_native_erp_technical_spec_v0_18_0_research_driven_phase0_ui_ux_audit_complete_execution.md` |
 | Validation waiver policy | `docs/process/validation-waiver-policy.md` |
 
 ## Validation waiver mode

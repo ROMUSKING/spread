@@ -58,6 +58,28 @@ idle
 
 Ambiguous command outcomes must be explicit but not alarming. Use stable wording and preserve the command ID in the details panel.
 
+### SYNC_REQUIRED (outbox retention gap or schema mismatch)
+
+Primary message:
+
+```text
+This workbook is out of sync with the server. Your local view will refresh now.
+```
+
+Actions:
+
+```text
+Refresh workbook (automatic)
+Retry sync (manual, if auto-refresh failed)
+Copy last event ID (diagnostics)
+```
+
+Disallowed action:
+
+```text
+Continue editing before refresh completes
+```
+
 ### Lost response after submit
 
 Primary message:

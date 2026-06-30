@@ -12,7 +12,7 @@ The API now exposes Phase 0 business handlers for product creation, party setup,
 Canonical guidance:
 
 ```text
-docs/snapshot-v0.17.0.md
+docs/snapshot-v0.18.0.md
 AGENTS.md
 docs/implementation/phase0-agent-work-orders.md
 ```

@@ -1,113 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  type BusinessActionStatusMap,
-  type FulfillmentAllocateInput,
-  type InventoryAdjustInput,
-  type PartyCreateInput,
-  type ProductCreateInput,
-  type PurchaseOrderCreateInput,
-  type PurchaseOrderReceiveInput,
-  type SalesOrderConfirmInput,
-  type SalesOrderCreateInput,
-  type InventoryReturnReceiptInput,
-  type PaymentRecordInput,
-} from "../components/BusinessCommandCenter";
+import { CommandNotice, StatusBadge } from "@erp/ui/index";
 import { TiledWorkspace } from "../components/TiledWorkspace";
 import { AppPreferences } from "../components/AppPreferences";
 import { usePreferences } from "../lib/usePreferences";
-import type { GridRow, GridColumn, CommandState } from "../components/SpreadsheetGrid";
 import type { WorkspaceNode, WorkspaceEdge } from "../components/ExplorerPanel";
-import { getCommandStatus } from "../lib/commandClient";
-import { useCommand, type CommandSubmitResult } from "../lib/useCommand";
+import { useCommand } from "../lib/useCommand";
 import { useSseSubscription } from "../lib/useSseSubscription";
 import { ALLOWED_WORKBOOKS } from "../lib/workbookConstants";
-// KEEP IN SYNC: ALLOWED_WORKBOOKS extended for ecom workbooks per design spec.
-// Full seeds + graph in postgres.ts + server.ts (see PR2 in sme-ecommerce-domain-model-and-business-logic-spec.md)
-import { resolveEventWorkbookId, assertAllowedWorkbook } from "../lib/workbookUtils";
-import {
-  isCommandFailure,
-  lifecycleToVisualState,
-  resolveEditVisualState,
-} from "../lib/commandUtils";
+import { isCommandFailure } from "../lib/commandUtils";
+import { useWorkbookState } from "../hooks/useWorkbookState";
+import { useBusinessCommands } from "../hooks/useBusinessCommands";
 
 const DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001";
-const REFRESH_MAX_RETRIES = 3;
-const BUSINESS_COMMAND_POLL_ATTEMPTS = 8;
-const BUSINESS_COMMAND_POLL_INTERVAL_MS = 750;
-
-const DEFAULT_COLUMNS: GridColumn[] = [
-  { columnId: "item_name", label: "Item Name" },
-  { columnId: "quantity", label: "Quantity" },
-  { columnId: "unit_price", label: "Unit Price" },
-  { columnId: "total", label: "Total" },
-];
-
-type ActiveEdit = {
-  workbookId: string;
-  rowId: string;
-  columnId: string;
-  value: string;
-  oldValue: string;
-  commandId: string | null;
-  rowExistedBeforeEdit: boolean;
-  lifecycleState: CommandState["state"];
-};
-
-type CommandController<TPayload> = {
-  submit: (payload: TPayload, submitOptions?: { workbookId?: string }) => Promise<CommandSubmitResult>;
-  refresh: () => void;
-};
-
-interface WorkbookResponse {
-  rows: Array<{ rowId: unknown; values: unknown }>;
-  columns?: Array<{ columnId: unknown; label: unknown }>;
-}
-
-function normalizeGridValue(value: unknown): string | null {
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (value === null) return "";
-  return null;
-}
-
-function parseWorkbookResponse(
-  payload: unknown
-): { rows: GridRow[]; columns: GridColumn[] } | null {
-  if (!payload || typeof payload !== "object") return null;
-  const data = payload as WorkbookResponse;
-
-  if (!Array.isArray(data.rows)) return null;
-  const normalizedRows: GridRow[] = [];
-  for (const row of data.rows) {
-    if (!row || typeof row !== "object") return null;
-    const rowId = typeof row.rowId === "string" ? row.rowId.trim() : "";
-    if (!rowId || !row.values || typeof row.values !== "object" || Array.isArray(row.values)) return null;
-    const values: Record<string, string> = {};
-    for (const [columnId, value] of Object.entries(row.values as Record<string, unknown>)) {
-      const nv = normalizeGridValue(value);
-      if (nv !== null) values[columnId] = nv;
-    }
-    normalizedRows.push({ rowId, values });
-  }
-
-  let parsedColumns: GridColumn[] | null = null;
-  if (Array.isArray(data.columns)) {
-    parsedColumns = [];
-    for (const col of data.columns) {
-      if (col && typeof col === "object") {
-        const c = col as Record<string, unknown>;
-        if (typeof c.columnId === "string" && typeof c.label === "string") {
-          parsedColumns.push({ columnId: c.columnId, label: c.label });
-        }
-      }
-    }
-  }
-
-  return { rows: normalizedRows, columns: parsedColumns || DEFAULT_COLUMNS };
-}
 
 interface SseSubscriberProps {
   tenantId: string;
@@ -177,28 +83,8 @@ export default function Page() {
 
   const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
   const [edges, setEdges] = useState<WorkspaceEdge[]>([]);
-  const [workbookRows, setWorkbookRows] = useState<Record<string, GridRow[]>>({});
-  const [workbookColumns, setWorkbookColumns] = useState<Record<string, GridColumn[]>>({});
-  const [snapshotLoaded, setSnapshotLoaded] = useState<Record<string, boolean>>({});
-  const [sseReady, setSseReady] = useState<Record<string, boolean>>({});
-  const [eventBuffers, setEventBuffers] = useState<Record<string, any[]>>({});
-  const [workbookSyncErrors, setWorkbookSyncErrors] = useState<Record<string, string>>({});
-  const [sseReconnectEpoch, setSseReconnectEpoch] = useState<Record<string, number>>({});
   const [graphMutationError, setGraphMutationError] = useState<string | null>(null);
   const [commandNotice, setCommandNotice] = useState<string | null>(null);
-  const [activeEdits, setActiveEdits] = useState<Map<string, ActiveEdit>>(new Map());
-  const activeEditsRef = useRef(activeEdits);
-
-  const nextRowIdRefs = useRef<Record<string, number>>({});
-  const lastCellCommandIdRef = useRef<string | null>(null);
-  const lastCellEditRef = useRef<{ workbookId: string; key: string } | null>(null);
-  const lastDeleteCommandIdRef = useRef<string | null>(null);
-  const lastDeleteContextRef = useRef<{ workbookId: string; prevRows: GridRow[] } | null>(null);
-  const ambiguousRecoveryRef = useRef(false);
-
-  useEffect(() => {
-    activeEditsRef.current = activeEdits;
-  }, [activeEdits]);
 
   const apiBaseUrl =
     typeof window !== "undefined"
@@ -209,16 +95,23 @@ export default function Page() {
   const deleteCmd = useCommand("row.delete", { tenantId, baseUrl: apiBaseUrl });
   const nodeAddCmd = useCommand("graph.node.add", { tenantId, baseUrl: apiBaseUrl });
   const edgeAddCmd = useCommand("graph.edge.add", { tenantId, baseUrl: apiBaseUrl });
-  const productCreateCmd = useCommand("product.create", { tenantId, baseUrl: apiBaseUrl });
-  const inventoryAdjustCmd = useCommand("inventory.adjust", { tenantId, baseUrl: apiBaseUrl });
-  const salesOrderCreateCmd = useCommand("salesOrder.create", { tenantId, baseUrl: apiBaseUrl });
-  const salesOrderConfirmCmd = useCommand("salesOrder.confirm", { tenantId, baseUrl: apiBaseUrl });
-  const fulfillmentAllocateCmd = useCommand("fulfillment.allocate", { tenantId, baseUrl: apiBaseUrl });
-  const purchaseOrderCreateCmd = useCommand("purchaseOrder.create", { tenantId, baseUrl: apiBaseUrl });
-  const purchaseOrderReceiveCmd = useCommand("purchaseOrder.receive", { tenantId, baseUrl: apiBaseUrl });
-  const partyCreateCmd = useCommand("party.create", { tenantId, baseUrl: apiBaseUrl });
-  const inventoryReturnReceiptCmd = useCommand("inventory.returnReceipt", { tenantId, baseUrl: apiBaseUrl });
-  const paymentRecordCmd = useCommand("payment.record", { tenantId, baseUrl: apiBaseUrl });
+
+  const workbook = useWorkbookState({
+    tenantId,
+    apiBaseUrl,
+    edges,
+    cellCmd,
+    deleteCmd,
+    setCommandNotice,
+  });
+
+  const business = useBusinessCommands({
+    tenantId,
+    apiBaseUrl,
+    edges,
+    refreshWorkbookSet: workbook.refreshWorkbookSet,
+    setCommandNotice,
+  });
 
   const refreshGraph = useCallback(async () => {
     try {
@@ -235,566 +128,19 @@ export default function Page() {
     }
   }, [apiBaseUrl]);
 
-  const refreshWorkbook = useCallback(
-    async (workbookId: string, attempt = 0): Promise<boolean> => {
-      try {
-        const response = await fetch(
-          `${apiBaseUrl}/api/workbooks?tenantId=${encodeURIComponent(tenantId)}&workbookId=${encodeURIComponent(workbookId)}`,
-          { method: "GET", headers: { accept: "application/json" } }
-        );
-
-        if (!response.ok) throw new Error(`Fetch failed (${response.status})`);
-
-        const parsed = parseWorkbookResponse(await response.json());
-        if (!parsed) throw new Error("Invalid payload format");
-
-        setWorkbookRows((prev) => ({ ...prev, [workbookId]: parsed.rows }));
-        setWorkbookColumns((prev) => ({ ...prev, [workbookId]: parsed.columns }));
-        setSnapshotLoaded((prev) => ({ ...prev, [workbookId]: true }));
-        setWorkbookSyncErrors((prev) => {
-          const next = { ...prev };
-          delete next[workbookId];
-          return next;
-        });
-        setActiveEdits((prev) => {
-          const next = new Map(prev);
-          for (const k of Array.from(next.keys())) if (k.startsWith(`${workbookId}:`)) next.delete(k);
-          return next;
-        });
-
-        const maxId = parsed.rows.reduce((max, r) => {
-          const n = Number(r.rowId);
-          return !isNaN(n) && n > max ? n : max;
-        }, 0);
-        nextRowIdRefs.current[workbookId] = maxId + 1;
-        return true;
-      } catch (e) {
-        if (attempt < REFRESH_MAX_RETRIES - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-          return refreshWorkbook(workbookId, attempt + 1);
-        }
-        const message = e instanceof Error ? e.message : "Workbook sync failed";
-        console.error(`Failed to refresh workbook ${workbookId}:`, e);
-        setWorkbookSyncErrors((prev) => ({ ...prev, [workbookId]: message }));
-        return false;
-      }
-    },
-    [tenantId, apiBaseUrl]
-  );
-
-  const refreshWorkbookSet = useCallback(
-    async (workbookIds: string[]) => {
-      const uniqueWorkbookIds = [...new Set(workbookIds)];
-      await Promise.all(uniqueWorkbookIds.map((workbookId) => refreshWorkbook(workbookId)));
-    },
-    [refreshWorkbook]
-  );
-
-  const settleBusinessCommand = useCallback(
-    async (commandId: string, workbookId: string) => {
-      for (let attempt = 0; attempt < BUSINESS_COMMAND_POLL_ATTEMPTS; attempt++) {
-        const status = await getCommandStatus(commandId, {
-          tenantId,
-          baseUrl: apiBaseUrl,
-          workbookId,
-        }).catch(() => null);
-
-        if (status && status.status !== "received" && status.status !== "pending") {
-          return status;
-        }
-
-        await new Promise((resolve) => window.setTimeout(resolve, BUSINESS_COMMAND_POLL_INTERVAL_MS));
-      }
-
-      return null;
-    },
-    [apiBaseUrl, tenantId]
-  );
-
-  const runBusinessCommand = useCallback(
-    async <TPayload,>({
-      controller,
-      payload,
-      workbookId,
-      refreshWorkbooks,
-      successMessage,
-      commandLabel,
-    }: {
-      controller: CommandController<TPayload>;
-      payload: TPayload;
-      workbookId: string;
-      refreshWorkbooks: string[];
-      successMessage: string;
-      commandLabel: string;
-    }): Promise<boolean> => {
-      setCommandNotice(null);
-      const result = await controller.submit(payload, { workbookId });
-
-      if (!result.initiated) {
-        setCommandNotice("Another command is still in progress. Wait for it to finish.");
-        return false;
-      }
-
-      if (result.state === "ambiguous_requires_refresh") {
-        await refreshWorkbookSet(refreshWorkbooks);
-        controller.refresh();
-        setCommandNotice(`${commandLabel} requires a refresh before retry.`);
-        return false;
-      }
-
-      if (result.state === "command_pending" && result.commandId) {
-        const settled = await settleBusinessCommand(result.commandId, workbookId);
-        if (settled?.status === "committed") {
-          await refreshWorkbookSet(refreshWorkbooks);
-          controller.refresh();
-          setCommandNotice(successMessage);
-          return true;
-        }
-        if (settled?.status === "ambiguous") {
-          await refreshWorkbookSet(refreshWorkbooks);
-          controller.refresh();
-          setCommandNotice(`${commandLabel} finished with an ambiguous outcome. The affected workbooks were refreshed.`);
-          return false;
-        }
-        if (settled && (settled.status === "failed" || settled.status === "rejected")) {
-          controller.refresh();
-          setCommandNotice(settled.problem?.message || `${commandLabel} did not complete.`);
-          return false;
-        }
-
-        setCommandNotice(`${commandLabel} is still pending. Watch the command status card before retrying.`);
-        return false;
-      }
-
-      if (result.state === "committed") {
-        await refreshWorkbookSet(refreshWorkbooks);
-        setCommandNotice(successMessage);
-        return true;
-      }
-
-      setCommandNotice(`${commandLabel} did not complete. Check the command status card for details.`);
-      return false;
-    },
-    [refreshWorkbookSet, settleBusinessCommand]
-  );
-
   useEffect(() => {
     void refreshGraph();
-    for (const wbId of ALLOWED_WORKBOOKS) {
-      void refreshWorkbook(wbId);
-    }
-  }, [refreshGraph, refreshWorkbook]);
-
-  const rollbackCellEdit = useCallback(
-    (
-      workbookId: string,
-      rowId: string,
-      columnId: string,
-      oldVal: string,
-      rowExistedBeforeEdit: boolean
-    ) => {
-      setWorkbookRows((prev) => {
-        const rws = prev[workbookId] || [];
-        if (!rowExistedBeforeEdit) {
-          return { ...prev, [workbookId]: rws.filter((r) => r.rowId !== rowId) };
-        }
-        const reverted = rws.map((r) =>
-          r.rowId === rowId ? { ...r, values: { ...r.values, [columnId]: oldVal } } : r
-        );
-        return { ...prev, [workbookId]: reverted };
-      });
-    },
-    []
-  );
-
-  const applySseDataEvent = useCallback((event: any) => {
-    const eventWorkbookId = resolveEventWorkbookId(event);
-    if (!eventWorkbookId) return;
-
-    if (event.eventType === "cell.update.committed") {
-      const payload = event.payload;
-      if (!payload || typeof payload !== "object") return;
-      const rowId = String(payload.rowId);
-      const columnId = String(payload.columnId);
-      const value = normalizeGridValue(payload.value) || "";
-
-      setWorkbookRows((prev) => {
-        const rows = prev[eventWorkbookId] || [];
-        const existing = rows.find((r) => r.rowId === rowId);
-        let nextRows = [...rows];
-
-        if (existing) {
-          nextRows = rows.map((row) => {
-            if (row.rowId !== rowId) return row;
-            const updatedValues = { ...row.values, [columnId]: value };
-
-            if (columnId === "quantity" || columnId === "unit_price") {
-              const qty = Number(updatedValues.quantity);
-              const price = Number(updatedValues.unit_price);
-              if (Number.isFinite(qty) && Number.isFinite(price)) {
-                updatedValues.total = (qty * price).toFixed(2);
-              }
-            }
-            return { ...row, values: updatedValues };
-          });
-        } else {
-          nextRows.push({ rowId, values: { [columnId]: value } });
-        }
-        return { ...prev, [eventWorkbookId]: nextRows };
-      });
-
-      setActiveEdits((prev) => {
-        const key = `${eventWorkbookId}:${rowId}:${columnId}`;
-        if (prev.has(key)) {
-          const next = new Map(prev);
-          next.delete(key);
-          return next;
-        }
-        return prev;
-      });
-    }
-
-    if (event.eventType === "row.delete.committed") {
-      const payload = event.payload;
-      const deletedRowId = payload && typeof payload.rowId === "string" ? payload.rowId : null;
-      if (deletedRowId) {
-        setWorkbookRows((prev) => {
-          const rows = prev[eventWorkbookId] || [];
-          return { ...prev, [eventWorkbookId]: rows.filter((r) => r.rowId !== deletedRowId) };
-        });
-      }
-    }
-
-    if (
-      typeof event.eventType === "string" &&
-      event.eventType.endsWith(".committed") &&
-      event.eventType !== "cell.update.committed" &&
-      event.eventType !== "row.delete.committed"
-    ) {
-      void refreshWorkbook(eventWorkbookId);
-    }
-  }, [refreshWorkbook]);
+  }, [refreshGraph]);
 
   const handleSseEvent = useCallback(
     (event: any) => {
-      if (event.eventType === "graph.node.committed" || event.eventType === "graph.edge.committed") {
+      const graphRefresh = workbook.handleSseEvent(event);
+      if (graphRefresh === "graph") {
         void refreshGraph();
-        return;
-      }
-
-      const eventWorkbookId = resolveEventWorkbookId(event);
-      if (!eventWorkbookId) return;
-
-      const ready = !!snapshotLoaded[eventWorkbookId] && !!sseReady[eventWorkbookId];
-      if (!ready) {
-        setEventBuffers((prev) => {
-          const cur = prev[eventWorkbookId] || [];
-          if (event.eventId && cur.some((e) => e.eventId === event.eventId)) return prev;
-          return { ...prev, [eventWorkbookId]: [...cur, event] };
-        });
-        return;
-      }
-      applySseDataEvent(event);
-    },
-    [refreshGraph, snapshotLoaded, sseReady, applySseDataEvent]
-  );
-
-  useEffect(() => {
-    setEventBuffers((prevBuf) => {
-      const nextBuf = { ...prevBuf };
-      let changed = false;
-      Object.keys(snapshotLoaded).forEach((wb) => {
-        if (snapshotLoaded[wb] && sseReady[wb]) {
-          const buf = nextBuf[wb];
-          if (buf && buf.length > 0) {
-            buf.forEach((ev) => applySseDataEvent(ev));
-            delete nextBuf[wb];
-            changed = true;
-          }
-        }
-      });
-      return changed ? nextBuf : prevBuf;
-    });
-  }, [snapshotLoaded, sseReady, applySseDataEvent]);
-
-  const handleSyncRequired = useCallback(
-    async (wbId: string) => {
-      console.warn(`SYNC_REQUIRED received for ${wbId}`);
-      setSnapshotLoaded((prev) => ({ ...prev, [wbId]: false }));
-      setSseReady((prev) => ({ ...prev, [wbId]: false }));
-      setEventBuffers((prev) => {
-        if (!prev[wbId]) return prev;
-        const next = { ...prev };
-        delete next[wbId];
-        return next;
-      });
-      const ok = await refreshWorkbook(wbId);
-      if (!ok) {
-        setSseReconnectEpoch((prev) => ({ ...prev, [wbId]: (prev[wbId] || 0) + 1 }));
       }
     },
-    [refreshWorkbook]
+    [workbook.handleSseEvent, refreshGraph]
   );
-
-  const handleRetrySync = useCallback(
-    async (wbId: string) => {
-      setSnapshotLoaded((prev) => ({ ...prev, [wbId]: false }));
-      setSseReady((prev) => ({ ...prev, [wbId]: false }));
-      setEventBuffers((prev) => {
-        if (!prev[wbId]) return prev;
-        const next = { ...prev };
-        delete next[wbId];
-        return next;
-      });
-      setSseReconnectEpoch((prev) => ({ ...prev, [wbId]: (prev[wbId] || 0) + 1 }));
-      const ok = await refreshWorkbook(wbId);
-      if (!ok) {
-        setSseReconnectEpoch((prev) => ({ ...prev, [wbId]: (prev[wbId] || 0) + 1 }));
-      }
-    },
-    [refreshWorkbook]
-  );
-
-  const handleSseConnected = useCallback((wbId: string) => {
-    setSseReady((prev) => ({ ...prev, [wbId]: true }));
-  }, []);
-
-  useEffect(() => {
-    const cmdId = cellCmd.commandId;
-    if (!cmdId) return;
-    const mapped = lifecycleToVisualState(cellCmd.state);
-    if (!mapped || mapped === "pending") return;
-
-    setActiveEdits((prev) => {
-      let changed = false;
-      const next = new Map(prev);
-      for (const [key, edit] of next) {
-        if (edit.commandId === cmdId && edit.lifecycleState !== mapped) {
-          next.set(key, { ...edit, lifecycleState: mapped });
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [cellCmd.state, cellCmd.commandId]);
-
-  useEffect(() => {
-    const failedId = cellCmd.commandId;
-    if (cellCmd.state !== "ambiguous_requires_refresh") return;
-    if (!failedId || failedId !== lastCellCommandIdRef.current) return;
-    if (ambiguousRecoveryRef.current) return;
-
-    const ctx = lastCellEditRef.current;
-    if (!ctx) return;
-
-    ambiguousRecoveryRef.current = true;
-    void (async () => {
-      const ok = await refreshWorkbook(ctx.workbookId);
-      if (ok) {
-        setActiveEdits((prev) => {
-          const next = new Map(prev);
-          for (const [k, edit] of next) {
-            if (edit.commandId === failedId) next.delete(k);
-          }
-          return next;
-        });
-        cellCmd.refresh();
-      } else {
-        const edit = activeEditsRef.current.get(ctx.key);
-        if (edit && edit.commandId === failedId) {
-          rollbackCellEdit(
-            edit.workbookId,
-            edit.rowId,
-            edit.columnId,
-            edit.oldValue,
-            edit.rowExistedBeforeEdit
-          );
-          setActiveEdits((prev) => {
-            const next = new Map(prev);
-            const current = next.get(ctx.key);
-            if (!current || current.commandId !== failedId) return prev;
-            next.set(ctx.key, {
-              ...current,
-              value: current.oldValue,
-              lifecycleState: "ambiguous_requires_refresh",
-            });
-            return next;
-          });
-        }
-        cellCmd.refresh();
-        setCommandNotice("Refresh failed. Edit rolled back; retry after sync recovers.");
-      }
-      ambiguousRecoveryRef.current = false;
-    })();
-  }, [cellCmd.state, cellCmd.commandId, refreshWorkbook, cellCmd, rollbackCellEdit]);
-
-  useEffect(() => {
-    const failedId = deleteCmd.commandId;
-    if (!failedId || failedId !== lastDeleteCommandIdRef.current) return;
-
-    if (isCommandFailure(deleteCmd.state) || deleteCmd.state === "ambiguous_requires_refresh") {
-      const ctx = lastDeleteContextRef.current;
-      if (ctx) {
-        setWorkbookRows((prev) => ({ ...prev, [ctx.workbookId]: ctx.prevRows }));
-        void refreshWorkbook(ctx.workbookId);
-      }
-      if (deleteCmd.state === "ambiguous_requires_refresh") deleteCmd.refresh();
-    }
-  }, [deleteCmd.state, deleteCmd.commandId, refreshWorkbook, deleteCmd]);
-
-  const handleCellEdit = useCallback(
-    async (workbookId: string, rowId: string, columnId: string, value: string) => {
-      if (!assertAllowedWorkbook(workbookId)) {
-        setCommandNotice(`Workbook ${workbookId.slice(-4)} is not available in this workspace.`);
-        return;
-      }
-
-      const rows = workbookRows[workbookId] || [];
-      const row = rows.find((r) => r.rowId === rowId);
-      const oldVal = row ? row.values[columnId] || "" : "";
-      const rowExistedBeforeEdit = !!row;
-      if (oldVal === value) return;
-
-      const key = `${workbookId}:${rowId}:${columnId}`;
-      setCommandNotice(null);
-      setActiveEdits((prev) => {
-        const next = new Map(prev);
-        next.set(key, {
-          workbookId,
-          rowId,
-          columnId,
-          value,
-          oldValue: oldVal,
-          commandId: null,
-          rowExistedBeforeEdit,
-          lifecycleState: "pending",
-        });
-        return next;
-      });
-
-      setWorkbookRows((prev) => {
-        const rws = prev[workbookId] || [];
-        let nextRows = rws.map((r) => {
-          if (r.rowId !== rowId) return r;
-          const updatedValues = { ...r.values, [columnId]: value };
-          if (columnId === "quantity" || columnId === "unit_price") {
-            const qty = Number(updatedValues.quantity);
-            const price = Number(updatedValues.unit_price);
-            if (Number.isFinite(qty) && Number.isFinite(price)) {
-              updatedValues.total = (qty * price).toFixed(2);
-            }
-          }
-          return { ...r, values: updatedValues };
-        });
-        const found = nextRows.some((r) => r.rowId === rowId);
-        if (!found) {
-          const cols = workbookColumns[workbookId] || DEFAULT_COLUMNS;
-          const vals: Record<string, string> = {};
-          cols.forEach((c) => {
-            vals[c.columnId] = "";
-          });
-          vals[columnId] = value;
-          if (columnId === "quantity" || columnId === "unit_price") {
-            const qty = Number(vals.quantity);
-            const price = Number(vals.unit_price);
-            if (Number.isFinite(qty) && Number.isFinite(price)) {
-              vals.total = (qty * price).toFixed(2);
-            }
-          }
-          nextRows = [...nextRows, { rowId, values: vals }];
-        }
-        return { ...prev, [workbookId]: nextRows };
-      });
-
-      const result = await cellCmd.submit({ rowId, columnId, value }, { workbookId });
-      lastCellCommandIdRef.current = result.commandId;
-      lastCellEditRef.current = { workbookId, key };
-
-      const resolvedLifecycle =
-        result.initiated && lifecycleToVisualState(result.state)
-          ? lifecycleToVisualState(result.state)!
-          : "pending";
-
-      setActiveEdits((prev) => {
-        const next = new Map(prev);
-        const edit = next.get(key);
-        if (edit) {
-          next.set(key, { ...edit, commandId: result.commandId, lifecycleState: resolvedLifecycle });
-        }
-        return next;
-      });
-
-      if (!result.initiated) {
-        setCommandNotice("Another edit is still in progress. Wait for it to finish.");
-        rollbackCellEdit(workbookId, rowId, columnId, oldVal, rowExistedBeforeEdit);
-        setActiveEdits((prev) => {
-          const next = new Map(prev);
-          next.delete(key);
-          return next;
-        });
-        return;
-      }
-
-      if (isCommandFailure(result.state)) {
-        rollbackCellEdit(workbookId, rowId, columnId, oldVal, rowExistedBeforeEdit);
-        setActiveEdits((prev) => {
-          const next = new Map(prev);
-          next.delete(key);
-          return next;
-        });
-        void refreshWorkbook(workbookId);
-      }
-    },
-    [workbookRows, workbookColumns, cellCmd, refreshWorkbook, rollbackCellEdit]
-  );
-
-  const handleCreateRow = useCallback((workbookId: string): string => {
-    const currentNextId = nextRowIdRefs.current[workbookId] || 1;
-    const newRowId = String(currentNextId);
-    nextRowIdRefs.current[workbookId] = currentNextId + 1;
-    return newRowId;
-  }, []);
-
-  const handleDeleteRow = useCallback(
-    async (workbookId: string, rowId: string) => {
-      if (!assertAllowedWorkbook(workbookId)) {
-        setCommandNotice(`Workbook ${workbookId.slice(-4)} is not available in this workspace.`);
-        return;
-      }
-
-      const prevRows = workbookRows[workbookId] || [];
-      lastDeleteContextRef.current = { workbookId, prevRows };
-      setCommandNotice(null);
-      setWorkbookRows((prev) => {
-        const rws = prev[workbookId] || [];
-        return { ...prev, [workbookId]: rws.filter((r) => r.rowId !== rowId) };
-      });
-
-      const result = await deleteCmd.submit({ rowId }, { workbookId });
-      lastDeleteCommandIdRef.current = result.commandId;
-
-      if (!result.initiated) {
-        setCommandNotice("Another command is still in progress. Wait for it to finish.");
-        setWorkbookRows((prev) => ({ ...prev, [workbookId]: prevRows }));
-        return;
-      }
-
-      if (isCommandFailure(result.state)) {
-        setWorkbookRows((prev) => ({ ...prev, [workbookId]: prevRows }));
-        void refreshWorkbook(workbookId);
-      }
-    },
-    [deleteCmd, workbookRows, refreshWorkbook]
-  );
-
-  // Phase 0 UI-only stub: column add is local state until a column command exists.
-  const handleAddColumn = useCallback((workbookId: string, columnId: string, label: string) => {
-    setWorkbookColumns((prev) => {
-      const cols = prev[workbookId] || [];
-      if (cols.some((c) => c.columnId === columnId)) return prev;
-      return { ...prev, [workbookId]: [...cols, { columnId, label }] };
-    });
-  }, []);
 
   const handleAddWorkbook = useCallback(
     async (label: string, categoryId: string) => {
@@ -856,345 +202,17 @@ export default function Page() {
     [edgeAddCmd, refreshGraph]
   );
 
-  const handleCreateProduct = useCallback(
-    async (input: ProductCreateInput) => {
-      return runBusinessCommand({
-        controller: productCreateCmd,
-        payload: {
-          productId: input.productId,
-          sku: input.sku,
-          name: input.name,
-          unit_price: input.unitPrice,
-          cost: input.cost,
-          tax_rate: input.taxRate,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000010",
-        refreshWorkbooks: ["00000000-0000-0000-0000-000000000010"],
-        successMessage: `Product ${input.productId} created.`,
-        commandLabel: "Product creation",
-      });
-    },
-    [productCreateCmd, runBusinessCommand]
-  );
-
-  const handleAdjustInventory = useCallback(
-    async (input: InventoryAdjustInput) => {
-      return runBusinessCommand({
-        controller: inventoryAdjustCmd,
-        payload: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-          delta: Number(input.delta),
-          reason: input.reason,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000014",
-        refreshWorkbooks: ["00000000-0000-0000-0000-000000000014"],
-        successMessage: `Inventory adjusted for ${input.productId}:${input.warehouseId}.`,
-        commandLabel: "Inventory adjustment",
-      });
-    },
-    [inventoryAdjustCmd, runBusinessCommand]
-  );
-
-  const handleCreateSalesOrder = useCallback(
-    async (input: SalesOrderCreateInput) => {
-      return runBusinessCommand({
-        controller: salesOrderCreateCmd,
-        payload: {
-          orderId: input.orderId,
-          customerId: input.customerId,
-          lines: [
-            {
-              productId: input.productId,
-              qty: Number(input.qty),
-              unit_price: input.unitPrice,
-            },
-          ],
-          status: input.status,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000015",
-        refreshWorkbooks: ["00000000-0000-0000-0000-000000000015"],
-        successMessage: `Sales order ${input.orderId} created.`,
-        commandLabel: "Sales order creation",
-      });
-    },
-    [runBusinessCommand, salesOrderCreateCmd]
-  );
-
-  const handleConfirmSalesOrder = useCallback(
-    async (input: SalesOrderConfirmInput) => {
-      return runBusinessCommand({
-        controller: salesOrderConfirmCmd,
-        payload: {
-          orderId: input.orderId,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000015",
-        refreshWorkbooks: ["00000000-0000-0000-0000-000000000015"],
-        successMessage: `Sales order ${input.orderId} confirmed.`,
-        commandLabel: "Sales order confirmation",
-      });
-    },
-    [runBusinessCommand, salesOrderConfirmCmd]
-  );
-
-  const handleAllocateFulfillment = useCallback(
-    async (input: FulfillmentAllocateInput) => {
-      return runBusinessCommand({
-        controller: fulfillmentAllocateCmd,
-        payload: {
-          orderId: input.orderId,
-          lines: [
-            {
-              lineId: input.lineId,
-              productId: input.productId,
-              warehouseId: input.warehouseId,
-              qty: Number(input.qty),
-            },
-          ],
-        },
-        workbookId: "00000000-0000-0000-0000-000000000015",
-        refreshWorkbooks: [
-          "00000000-0000-0000-0000-000000000015",
-          "00000000-0000-0000-0000-000000000014",
-        ],
-        successMessage: `Stock reserved for ${input.orderId}:${input.lineId}.`,
-        commandLabel: "Stock reservation",
-      });
-    },
-    [fulfillmentAllocateCmd, runBusinessCommand]
-  );
-
-  const handleCreatePurchaseOrder = useCallback(
-    async (input: PurchaseOrderCreateInput) => {
-      return runBusinessCommand({
-        controller: purchaseOrderCreateCmd,
-        payload: {
-          poId: input.poId,
-          supplierId: input.supplierId,
-          lines: [
-            {
-              productId: input.productId,
-              qtyOrdered: Number(input.qtyOrdered),
-              unit_price: input.unitPrice,
-            },
-          ],
-          status: input.status,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000016",
-        refreshWorkbooks: ["00000000-0000-0000-0000-000000000016"],
-        successMessage: `Purchase order ${input.poId} created.`,
-        commandLabel: "Purchase order creation",
-      });
-    },
-    [purchaseOrderCreateCmd, runBusinessCommand]
-  );
-
-  const handleReceivePurchaseOrder = useCallback(
-    async (input: PurchaseOrderReceiveInput) => {
-      return runBusinessCommand({
-        controller: purchaseOrderReceiveCmd,
-        payload: {
-          poId: input.poId,
-          receiptId: input.receiptId || undefined,
-          lines: [
-            {
-              poLineId: input.poLineId,
-              productId: input.productId,
-              warehouseId: input.warehouseId,
-              qtyReceived: Number(input.qtyReceived),
-              unitCost: input.unitCost,
-            },
-          ],
-        },
-        workbookId: "00000000-0000-0000-0000-000000000016",
-        refreshWorkbooks: [
-          "00000000-0000-0000-0000-000000000016",
-          "00000000-0000-0000-0000-000000000014",
-        ],
-        successMessage: `Purchase order ${input.poId} received into ${input.warehouseId}.`,
-        commandLabel: "Purchase order receipt",
-      });
-    },
-    [purchaseOrderReceiveCmd, runBusinessCommand]
-  );
-
-  const handleCreateParty = useCallback(
-    async (input: PartyCreateInput) => {
-      return runBusinessCommand({
-        controller: partyCreateCmd,
-        payload: {
-          partyId: input.partyId,
-          legalName: input.legalName,
-          taxId: input.taxId,
-          email: input.email,
-          phone: input.phone,
-          asCustomer: input.asCustomer
-            ? { creditLimit: input.creditLimit, paymentTerms: input.paymentTerms }
-            : undefined,
-          asSupplier: input.asSupplier
-            ? { leadTimeDays: input.leadTimeDays, paymentTerms: input.paymentTerms }
-            : undefined,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000023",
-        refreshWorkbooks: [
-          "00000000-0000-0000-0000-000000000023",
-          "00000000-0000-0000-0000-000000000024",
-          "00000000-0000-0000-0000-000000000025",
-        ],
-        successMessage: `Party ${input.partyId} created.`,
-        commandLabel: "Party creation",
-      });
-    },
-    [partyCreateCmd, runBusinessCommand]
-  );
-
-  const handleReceiveReturn = useCallback(
-    async (input: InventoryReturnReceiptInput) => {
-      return runBusinessCommand({
-        controller: inventoryReturnReceiptCmd,
-        payload: {
-          originalFulfillmentId: input.originalFulfillmentId || undefined,
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-          qty: Number(input.qty),
-          reason: input.reason,
-          originalOrderId: input.originalOrderId || undefined,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000017",
-        refreshWorkbooks: [
-          "00000000-0000-0000-0000-000000000017",
-          "00000000-0000-0000-0000-000000000014",
-          "00000000-0000-0000-0000-000000000015",
-        ],
-        successMessage: `Returned stock received for product ${input.productId}.`,
-        commandLabel: "Return receipt processing",
-      });
-    },
-    [inventoryReturnReceiptCmd, runBusinessCommand]
-  );
-
-  const handleRecordPayment = useCallback(
-    async (input: PaymentRecordInput) => {
-      return runBusinessCommand({
-        controller: paymentRecordCmd,
-        payload: {
-          orderId: input.orderId,
-          customerId: input.customerId,
-          amount: input.amount,
-          paymentMethod: input.paymentMethod,
-        },
-        workbookId: "00000000-0000-0000-0000-000000000004",
-        refreshWorkbooks: [
-          "00000000-0000-0000-0000-000000000004",
-          "00000000-0000-0000-0000-000000000015",
-        ],
-        successMessage: `Payment of $${input.amount} recorded for order ${input.orderId}.`,
-        commandLabel: "Payment recording",
-      });
-    },
-    [paymentRecordCmd, runBusinessCommand]
-  );
-
-  const businessActionStatuses: BusinessActionStatusMap = {
-    product: {
-      state: productCreateCmd.state,
-      commandId: productCreateCmd.commandId,
-      error: productCreateCmd.error?.message || null,
-      elapsedMs: productCreateCmd.elapsedMs,
-      reset: productCreateCmd.refresh,
-    },
-    inventory: {
-      state: inventoryAdjustCmd.state,
-      commandId: inventoryAdjustCmd.commandId,
-      error: inventoryAdjustCmd.error?.message || null,
-      elapsedMs: inventoryAdjustCmd.elapsedMs,
-      reset: inventoryAdjustCmd.refresh,
-    },
-    salesOrder: {
-      state: salesOrderCreateCmd.state,
-      commandId: salesOrderCreateCmd.commandId,
-      error: salesOrderCreateCmd.error?.message || null,
-      elapsedMs: salesOrderCreateCmd.elapsedMs,
-      reset: salesOrderCreateCmd.refresh,
-    },
-    salesOrderConfirm: {
-      state: salesOrderConfirmCmd.state,
-      commandId: salesOrderConfirmCmd.commandId,
-      error: salesOrderConfirmCmd.error?.message || null,
-      elapsedMs: salesOrderConfirmCmd.elapsedMs,
-      reset: salesOrderConfirmCmd.refresh,
-    },
-    fulfillmentAllocate: {
-      state: fulfillmentAllocateCmd.state,
-      commandId: fulfillmentAllocateCmd.commandId,
-      error: fulfillmentAllocateCmd.error?.message || null,
-      elapsedMs: fulfillmentAllocateCmd.elapsedMs,
-      reset: fulfillmentAllocateCmd.refresh,
-    },
-    purchaseOrder: {
-      state: purchaseOrderCreateCmd.state,
-      commandId: purchaseOrderCreateCmd.commandId,
-      error: purchaseOrderCreateCmd.error?.message || null,
-      elapsedMs: purchaseOrderCreateCmd.elapsedMs,
-      reset: purchaseOrderCreateCmd.refresh,
-    },
-    purchaseReceipt: {
-      state: purchaseOrderReceiveCmd.state,
-      commandId: purchaseOrderReceiveCmd.commandId,
-      error: purchaseOrderReceiveCmd.error?.message || null,
-      elapsedMs: purchaseOrderReceiveCmd.elapsedMs,
-      reset: purchaseOrderReceiveCmd.refresh,
-    },
-    party: {
-      state: partyCreateCmd.state,
-      commandId: partyCreateCmd.commandId,
-      error: partyCreateCmd.error?.message || null,
-      elapsedMs: partyCreateCmd.elapsedMs,
-      reset: partyCreateCmd.refresh,
-    },
-    inventoryReturnReceipt: {
-      state: inventoryReturnReceiptCmd.state,
-      commandId: inventoryReturnReceiptCmd.commandId,
-      error: inventoryReturnReceiptCmd.error?.message || null,
-      elapsedMs: inventoryReturnReceiptCmd.elapsedMs,
-      reset: inventoryReturnReceiptCmd.refresh,
-    },
-    paymentRecord: {
-      state: paymentRecordCmd.state,
-      commandId: paymentRecordCmd.commandId,
-      error: paymentRecordCmd.error?.message || null,
-      elapsedMs: paymentRecordCmd.elapsedMs,
-      reset: paymentRecordCmd.refresh,
-    },
-  };
-
-  const commandStates = new Map<string, CommandState>();
-  for (const [key, edit] of activeEdits) {
-    const visualState = resolveEditVisualState(
-      edit.lifecycleState,
-      edit.commandId,
-      cellCmd.commandId,
-      cellCmd.commandId && edit.commandId === cellCmd.commandId ? cellCmd.state : null
-    );
-
-    commandStates.set(key, {
-      state: visualState,
-      value: edit.value,
-      error: edit.commandId === cellCmd.commandId ? cellCmd.error?.message : undefined,
-    });
-  }
-
   return (
     <main className="app-shell">
       {ALLOWED_WORKBOOKS.map((wbId) => (
         <SseSubscriber
-          key={`${wbId}-${sseReconnectEpoch[wbId] || 0}`}
+          key={`${wbId}-${workbook.sseReconnectEpoch[wbId] || 0}`}
           tenantId={tenantId}
           workbookId={wbId}
-          snapshotLoaded={!!snapshotLoaded[wbId]}
+          snapshotLoaded={!!workbook.snapshotLoaded[wbId]}
           onEvent={handleSseEvent}
-          onSyncRequired={handleSyncRequired}
-          onConnected={handleSseConnected}
+          onSyncRequired={workbook.handleSyncRequired}
+          onConnected={workbook.handleSseConnected}
         />
       ))}
 
@@ -1202,25 +220,21 @@ export default function Page() {
         <div>
           <h1 className="app-title">Spread ERP</h1>
           <p className="app-subtitle">Multi-workbook workspace with live command status</p>
-          {commandNotice && (
-            <p className="status-badge status-badge--danger" style={{ marginTop: "var(--space-sm)" }}>
-              {commandNotice}
-            </p>
-          )}
+          {commandNotice && <CommandNotice message={commandNotice} />}
           {graphMutationError && (
-            <p className="status-badge status-badge--danger" style={{ marginTop: "var(--space-sm)" }}>
+            <StatusBadge variant="danger" as="p" style={{ marginTop: "var(--space-sm)" }}>
               {graphMutationError}
-            </p>
+            </StatusBadge>
           )}
-          {Object.entries(workbookSyncErrors).map(([wbId, msg]) => (
+          {Object.entries(workbook.workbookSyncErrors).map(([wbId, msg]) => (
             <div
               key={wbId}
               style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginTop: "var(--space-xs)" }}
             >
-              <span className="status-badge status-badge--danger">
+              <StatusBadge variant="danger">
                 Sync failed for {wbId.slice(-4)}: {msg}
-              </span>
-              <button type="button" className="btn btn--ghost" onClick={() => handleRetrySync(wbId)}>
+              </StatusBadge>
+              <button type="button" className="btn btn--ghost" onClick={() => workbook.handleRetrySync(wbId)}>
                 Retry sync
               </button>
             </div>
@@ -1241,29 +255,29 @@ export default function Page() {
         nodes={nodes}
         edges={edges}
         allowedWorkbookIds={[...ALLOWED_WORKBOOKS]}
-        workbookRows={workbookRows}
-        workbookColumns={workbookColumns}
-        commandStates={commandStates}
-        onCellEdit={handleCellEdit}
-        onCreateRow={handleCreateRow}
-        onDeleteRow={handleDeleteRow}
-        onAddColumn={handleAddColumn}
+        workbookRows={workbook.workbookRows}
+        workbookColumns={workbook.workbookColumns}
+        commandStates={workbook.commandStates}
+        onCellEdit={workbook.handleCellEdit}
+        onCreateRow={workbook.handleCreateRow}
+        onDeleteRow={workbook.handleDeleteRow}
+        onAddColumn={workbook.handleAddColumn}
         onAddWorkbook={handleAddWorkbook}
         onAddCategory={handleAddCategory}
         onAddEdge={handleAddEdge}
         getColumnWidth={getColumnWidth}
         onColumnWidthChange={setColumnWidth}
-        businessActionStatuses={businessActionStatuses}
-        onCreateProduct={handleCreateProduct}
-        onAdjustInventory={handleAdjustInventory}
-        onCreateSalesOrder={handleCreateSalesOrder}
-        onConfirmSalesOrder={handleConfirmSalesOrder}
-        onAllocateFulfillment={handleAllocateFulfillment}
-        onCreatePurchaseOrder={handleCreatePurchaseOrder}
-        onReceivePurchaseOrder={handleReceivePurchaseOrder}
-        onCreateParty={handleCreateParty}
-        onReceiveReturn={handleReceiveReturn}
-        onRecordPayment={handleRecordPayment}
+        businessActionStatuses={business.businessActionStatuses}
+        onCreateProduct={business.handleCreateProduct}
+        onAdjustInventory={business.handleAdjustInventory}
+        onCreateSalesOrder={business.handleCreateSalesOrder}
+        onConfirmSalesOrder={business.handleConfirmSalesOrder}
+        onAllocateFulfillment={business.handleAllocateFulfillment}
+        onCreatePurchaseOrder={business.handleCreatePurchaseOrder}
+        onReceivePurchaseOrder={business.handleReceivePurchaseOrder}
+        onCreateParty={business.handleCreateParty}
+        onReceiveReturn={business.handleReceiveReturn}
+        onRecordPayment={business.handleRecordPayment}
       />
     </main>
   );

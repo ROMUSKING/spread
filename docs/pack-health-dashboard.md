@@ -1,8 +1,8 @@
-# Pack Health Dashboard v0.17.0
+# Pack Health Dashboard v0.18.0
 
 | Category | Status | Evidence |
 |---|---|---|
-| Active spec singleton | Green | `spec/*v0_17_0*` only |
+| Active spec singleton | Green | `spec/*v0_18_0*` only |
 | Pack validation | Green | `v0161_validation.txt` |
 | Smoke typecheck | Green | `v0161_smoke_typecheck.txt` |
 | Package smoke tests | Green | `v0161_package_smoke_tests.txt` |

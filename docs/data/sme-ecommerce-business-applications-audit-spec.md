@@ -2,7 +2,7 @@
 
 **Document ID:** SPEC-BUS-APPS-AUDIT-001  
 **Title:** Audit of Existing Business Applications (View Presets) and Design of Most Commonly Used Ones for SME Online Ecommerce with Own Warehouse  
-**Version:** 0.17.1  
+**Version:** 0.18.0  
 **Date:** 2026-06-28  
 **Status:** Approved  
 **Related:** 

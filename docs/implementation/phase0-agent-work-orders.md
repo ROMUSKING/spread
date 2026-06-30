@@ -8,7 +8,7 @@
 
 Each work order is intended to become one PR. A work order may be split into smaller PRs, but must not be combined with unrelated work unless the Engineering Lead approves the combined scope.
 
-Agents must read `docs/snapshot-v0.17.0.md`, `AGENTS.md`, `docs/implementation/ai-coding-agent-roadmap.md`, and the canonical docs listed in each work order before changing files. Work orders that touch covered command/outbox/ledger/retrieval boundaries must start from `docs/skeletons/`.
+Agents must read `docs/snapshot-v0.18.0.md`, `AGENTS.md`, `docs/implementation/ai-coding-agent-roadmap.md`, and the canonical docs listed in each work order before changing files. Work orders that touch covered command/outbox/ledger/retrieval boundaries must start from `docs/skeletons/`.
 
 ---
 
@@ -24,7 +24,7 @@ Agents must read `docs/snapshot-v0.17.0.md`, `AGENTS.md`, `docs/implementation/a
 AGENTS.md
 docs/pack-index.md
 docs/maintenance/normative-source-map.md
-docs/snapshot-v0.17.0.md
+docs/snapshot-v0.18.0.md
 scripts/validate-pack.sh
 .github/workflows/validate-pack.yml
 ```
@@ -484,9 +484,11 @@ ci://benchmarks/BENCH-RATE-001
 
 ## AGENT-060 — Minimal spreadsheet edit UI vertical slice
 
-**Objective:** implement the smallest spreadsheet-like UI surface needed to edit one safe cell.
+**Objective:** prove one safe cell edit end-to-end through command API, SSE, and command-status recovery.
 
 **Dependencies:** AGENT-013, AGENT-022.
+
+**Scope note (v0.18.0):** The current `apps/web` shell includes preview tiling and business presets beyond this work order's minimal scope. That scaffolding is **not** P1-UX-001 completion. AGENT-060 acceptance is **one safe cell e2e green** only.
 
 **Canonical docs:**
 
@@ -494,6 +496,7 @@ ci://benchmarks/BENCH-RATE-001
 docs/dev/client-optimistic-ui-and-conflicts.md
 docs/plan/vertical-slice-acceptance-checklist.md
 docs/ui/transposed-record-view-contract.md
+docs/ui/spreadsheet-native-ux-specification.md
 ```
 
 **Implementation steps:**
@@ -503,7 +506,7 @@ docs/ui/transposed-record-view-contract.md
 3. Render pending/committed/rejected/ambiguous states.
 4. Receive polling SSE update.
 5. Implement refresh before retry on ambiguity.
-6. Do not implement full tiling workspace.
+6. Do not expand preview tiling until AGENT-090 is green.
 
 **Required evidence:**
 
@@ -511,6 +514,148 @@ docs/ui/transposed-record-view-contract.md
 ci://tests/e2e/vertical-slice/safe-cell-edit
 ci://tests/ui/command-status-visible-in-tiles
 ci://tests/client/ambiguous-requires-refresh
+```
+
+---
+
+## AGENT-061 — Column metadata rendering
+
+**Objective:** render server-discovered column metadata (enum, number/currency format, read-only/protected hints) in grid and transposed views.
+
+**Dependencies:** AGENT-060.
+
+**Canonical docs:**
+
+```text
+docs/ui/spreadsheet-native-ux-specification.md
+docs/data/sme-ecommerce-schema-critical-review-and-ux-alternatives.md
+```
+
+**Implementation steps:**
+
+1. Extend `GridColumn` contract in `packages/contracts` with optional `type`, `format`, `enumOptions`, `readOnly`, `protected`.
+2. Return metadata from server column discovery when meta rows exist.
+3. Render enum as `<select>`, number with format hints, protected as read-only with action affordance.
+4. Apply same rendering in `TransposedDetail`.
+
+**Required evidence:**
+
+```text
+ci://tests/ui/column-meta-renders-enum-select
+```
+
+---
+
+## AGENT-062 — Cross-workbook live refresh
+
+**Objective:** refresh all open tiles when outbox events include `affects_workbooks`.
+
+**Dependencies:** AGENT-060.
+
+**Canonical docs:**
+
+```text
+docs/ui/spreadsheet-native-ux-specification.md
+docs/dev/outbox-polling-reader.md
+```
+
+**Implementation steps:**
+
+1. Add optional `affects_workbooks` to outbox event envelope.
+2. On SSE delivery, refresh tiles whose `workbookId` is listed.
+3. Fall back to relations-graph `getRelatedWorkbooks` when field absent.
+4. Add stable `SYNC_REQUIRED` user-facing copy.
+
+**Required evidence:**
+
+```text
+ci://tests/ui/cross-workbook-tile-refresh
+```
+
+---
+
+## AGENT-063 — Flattened order client grouping
+
+**Objective:** render collapsible order groups for flattened SalesOrders (HDR/LINE convention).
+
+**Dependencies:** AGENT-061.
+
+**Canonical docs:**
+
+```text
+docs/ui/spreadsheet-native-ux-specification.md
+docs/data/sme-ecommerce-schema-critical-review-and-ux-alternatives.md
+```
+
+**Implementation steps:**
+
+1. Detect `*-HDR` vs line rows by `row_id` convention.
+2. Render group headers with summary fields; collapsible line sections.
+3. Style HDR rows distinctly (sticky group header optional).
+4. Preserve `cell.update` command shape for all editable cells.
+
+**Required evidence:**
+
+```text
+ci://tests/ui/sales-order-group-rendering
+```
+
+---
+
+## AGENT-064 — Grid scalability and Glide POC
+
+**Objective:** add `react-window` virtualization and run Glide Data Grid POC per ADR-0028.
+
+**Dependencies:** AGENT-063.
+
+**Canonical docs:**
+
+```text
+docs/adr/ADR-0028-grid-engine-dar.md
+docs/qa/ui-benchmark-plan.md
+docs/review/ui_ux_alternative_development_paths.md
+```
+
+**Implementation steps:**
+
+1. Integrate `react-window` row virtualization in `SpreadsheetGrid`.
+2. Maintain command-state overlays and keyboard model.
+3. Create Glide POC branch; wire `onCellEdited` → `cell.update`.
+4. Record benchmark evidence for 10k/100k row datasets.
+
+**Required evidence:**
+
+```text
+ci://benchmarks/BENCH-UX-001
+ci://tests/ui/glide-poc-cell-update-wiring
+```
+
+---
+
+## AGENT-065 — Extract packages/ui and refactor page.tsx
+
+**Objective:** extract reusable UI components and split `page.tsx` orchestration into hooks.
+
+**Dependencies:** AGENT-064.
+
+**Canonical docs:**
+
+```text
+docs/implementation/project-directory-structure.md
+docs/ui/spreadsheet-native-ux-specification.md
+```
+
+**Implementation steps:**
+
+1. Move `CellEditor`, `StatusBadge`, `CommandNotice` to `packages/ui`.
+2. Create `useWorkbookState` and `useBusinessCommands` hooks.
+3. Reduce `page.tsx` to composition shell.
+4. Keep smoke tests passing without weakening validation.
+
+**Required evidence:**
+
+```text
+ci://tests/ui/command-status-visible-in-tiles
 ```
 
 ---
@@ -667,6 +812,7 @@ docs/ui/spreadsheet-tiled-workspace-strategy.md
 ```text
 - interface definitions
 - schema metadata hooks
+- column metadata and action column prototypes (AGENT-061)
 - feature flags defaulting off
 - fixture generation
 - docs and tests proving feature is not in MVP edit path
@@ -680,7 +826,7 @@ docs/ui/spreadsheet-tiled-workspace-strategy.md
 - DuckDB analytics as operational source of truth
 - TigerBeetle authoritative cutover
 - connector marketplace runtime
-- full tiled workspace runtime
+- full tiled workspace runtime (P1-UX-001 evidence required)
 ```
 
 **Required evidence:**
@@ -692,6 +838,6 @@ ci://tests/process/no-post-mvp-plane-in-phase0-edit-path
 
 
 
-## v0.17.0 repository bootstrap note
+## v0.18.0 repository bootstrap note
 
 Agents must use `docs/implementation/project-directory-structure.md` and `docs/implementation/code-stub-index.md` before changing `apps/` or `packages/`.

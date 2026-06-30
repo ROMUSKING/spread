@@ -11,7 +11,13 @@ import {
   PREFERENCES_STORAGE_KEY,
 } from "../src/lib/preferencesUtils.ts";
 import { cellStatusClass, resolveColumnWidth } from "../src/lib/gridUtils.ts";
-import { resolveEventWorkbookId, assertAllowedWorkbook } from "../src/lib/workbookUtils.ts";
+import {
+  resolveEventWorkbookId,
+  assertAllowedWorkbook,
+  resolveWorkbooksToRefresh,
+  resolveRelatedWorkbooksFromGraph,
+  SYNC_REQUIRED_USER_MESSAGE,
+} from "../src/lib/workbookUtils.ts";
 import {
   isCommandFailure,
   isTerminalVisualState,
@@ -20,6 +26,11 @@ import {
 } from "../src/lib/commandUtils.ts";
 import { ALLOWED_WORKBOOKS } from "../src/lib/workbookConstants.ts";
 import { COLUMN_WIDTH_DEFAULT, COLUMN_WIDTH_MAX, COLUMN_WIDTH_MIN } from "../src/lib/uiConstants.ts";
+import {
+  formatDisplayValue,
+  isColumnEditable,
+  columnUsesEnumSelect,
+} from "../src/lib/columnMetaUtils.ts";
 
 const cwd = process.cwd();
 const pkg = JSON.parse(fs.readFileSync(path.join(cwd, "package.json"), "utf8"));
@@ -28,7 +39,7 @@ test("@erp/web package metadata is coherent", () => {
   assert.equal(pkg.name, "@erp/web");
   assert.equal(pkg.private, true);
   assert.equal(pkg.type, "module");
-  assert.equal(pkg.version, "0.17.1");
+  assert.equal(pkg.version, "0.18.0");
 });
 
 test("@erp/web required bootstrap source stub exists", () => {
@@ -43,6 +54,8 @@ test("@erp/web UI preference and style files exist", () => {
     "src/lib/workbookUtils.ts",
     "src/lib/commandUtils.ts",
     "src/lib/emptyStateCopy.ts",
+    "src/hooks/useWorkbookState.ts",
+    "src/hooks/useBusinessCommands.ts",
     "src/components/AppPreferences.tsx",
     "src/styles/globals.css",
   ];
@@ -215,25 +228,26 @@ test("resolveEditVisualState overwrites terminal edit when hook is also terminal
 
 test("@erp/web SSE handshake resets on sync required", () => {
   const page = fs.readFileSync(path.join(cwd, "src/app/page.tsx"), "utf8");
+  const workbookHook = fs.readFileSync(path.join(cwd, "src/hooks/useWorkbookState.ts"), "utf8");
   const sse = fs.readFileSync(path.join(cwd, "src/lib/useSseSubscription.ts"), "utf8");
   assert.match(page, /const handshakeSentRef = useRef\(false\)/);
   assert.match(page, /handshakeSentRef\.current = false/);
-  assert.match(page, /setEventBuffers/);
-  assert.match(page, /sseReconnectEpoch/);
-  assert.match(page, /handleRetrySync/);
-  assert.doesNotMatch(page, /if \(!ok\) \{\s*setSnapshotLoaded/);
+  assert.match(workbookHook, /setEventBuffers/);
+  assert.match(workbookHook, /sseReconnectEpoch/);
+  assert.match(workbookHook, /handleRetrySync/);
+  assert.doesNotMatch(workbookHook, /if \(!ok\) \{\s*setSnapshotLoaded/);
   assert.match(sse, /eventType === "SYNC_REQUIRED"[\s\S]*scheduleReconnect\(\)/);
   assert.match(sse, /lastEventIdRef\.current = baseWatermarkRef\.current/);
-  assert.match(page, /handleRetrySync[\s\S]*setEventBuffers/);
-  assert.match(page, /handleRetrySync[\s\S]*setSnapshotLoaded/);
+  assert.match(workbookHook, /handleRetrySync[\s\S]*setEventBuffers/);
+  assert.match(workbookHook, /handleRetrySync[\s\S]*setSnapshotLoaded/);
 });
 
 test("@erp/web allowlist guards are wired at navigation and mutation entry points", () => {
-  const page = fs.readFileSync(path.join(cwd, "src/app/page.tsx"), "utf8");
+  const workbookHook = fs.readFileSync(path.join(cwd, "src/hooks/useWorkbookState.ts"), "utf8");
   const tiled = fs.readFileSync(path.join(cwd, "src/components/TiledWorkspace.tsx"), "utf8");
   const explorer = fs.readFileSync(path.join(cwd, "src/components/ExplorerPanel.tsx"), "utf8");
   const graph = fs.readFileSync(path.join(cwd, "src/components/WorkbookGraph.tsx"), "utf8");
-  assert.match(page, /assertAllowedWorkbook/);
+  assert.match(workbookHook, /assertAllowedWorkbook/);
   assert.match(tiled, /allowedWorkbookIds\.includes/);
   assert.match(explorer, /allowedWorkbookIds\.includes/);
   assert.match(graph, /allowedWorkbookIds\.includes/);
@@ -241,7 +255,20 @@ test("@erp/web allowlist guards are wired at navigation and mutation entry point
 
 test("@erp/web command notices use error badge styling", () => {
   const page = fs.readFileSync(path.join(cwd, "src/app/page.tsx"), "utf8");
-  assert.match(page, /commandNotice[\s\S]*status-badge--danger/);
+  assert.match(page, /commandNotice[\s\S]*CommandNotice/);
+});
+
+test("ci://tests/ui/command-status-visible-in-tiles — business statuses wired to tiles", () => {
+  const page = fs.readFileSync(path.join(cwd, "src/app/page.tsx"), "utf8");
+  const tiled = fs.readFileSync(path.join(cwd, "src/components/TiledWorkspace.tsx"), "utf8");
+  const center = fs.readFileSync(path.join(cwd, "src/components/BusinessCommandCenter.tsx"), "utf8");
+
+  assert.match(page, /useBusinessCommands/);
+  assert.match(page, /businessActionStatuses=\{business\.businessActionStatuses\}/);
+  assert.match(tiled, /businessActionStatuses/);
+  assert.match(tiled, /statuses=\{businessActionStatuses\}/);
+  assert.match(center, /ActionStatusCard/);
+  assert.match(center, /status\.commandId/);
 });
 
 test("@erp/web spreadsheet resize clears body class on unmount", () => {
@@ -305,4 +332,145 @@ test("@erp/web range selection styles exist in globals.css", () => {
   assert.match(css, /\.spreadsheet-cell--range-bottom/);
   assert.match(css, /\.spreadsheet-cell--range-left/);
   assert.match(css, /\.spreadsheet-cell--range-right/);
+});
+
+test("ci://tests/ui/column-meta-renders-enum-select — grid wires CellValueEditor select", () => {
+  const grid = fs.readFileSync(path.join(cwd, "src/components/SpreadsheetGrid.tsx"), "utf8");
+  const editor = fs.readFileSync(
+    path.join(cwd, "../../packages/ui/src/CellValueEditor.tsx"),
+    "utf8"
+  );
+  const detail = fs.readFileSync(path.join(cwd, "src/components/TransposedDetail.tsx"), "utf8");
+  assert.match(grid, /CellValueEditor/);
+  assert.match(grid, /isColumnEditable/);
+  assert.match(grid, /formatDisplayValue/);
+  assert.match(editor, /<select/);
+  assert.match(editor, /columnUsesEnumSelect/);
+  assert.match(editor, /enumOptions/);
+  assert.match(detail, /CellValueEditor/);
+});
+
+test("column meta utils format currency and guard protected columns", () => {
+  const currencyCol = { columnId: "unit_price", label: "Unit Price", type: "number", format: "currency" };
+  assert.match(formatDisplayValue("12.5", currencyCol), /\$12\.50/);
+  assert.equal(isColumnEditable({ columnId: "status", label: "Status", protected: true }), false);
+  assert.equal(
+    columnUsesEnumSelect({
+      columnId: "status",
+      label: "Status",
+      type: "enum",
+      enumOptions: ["DRAFT", "SHIPPED"],
+    }),
+    true
+  );
+});
+
+test("@erp/web protected column styles exist in globals.css", () => {
+  const css = fs.readFileSync(path.join(cwd, "src/styles/globals.css"), "utf8");
+  assert.match(css, /\.spreadsheet-cell--protected/);
+  assert.match(css, /\.detail-field--protected/);
+});
+
+test("@erp/web server column meta discovery wired in api server", () => {
+  const server = fs.readFileSync(path.join(cwd, "../../apps/api/src/server.ts"), "utf8");
+  assert.match(server, /buildWorkbookColumnsFromCells/);
+});
+
+test("ci://tests/ui/cross-workbook-tile-refresh — resolves affects_workbooks fan-out", () => {
+  const workbookHook = fs.readFileSync(path.join(cwd, "src/hooks/useWorkbookState.ts"), "utf8");
+  const businessHook = fs.readFileSync(path.join(cwd, "src/hooks/useBusinessCommands.ts"), "utf8");
+  assert.match(workbookHook, /resolveWorkbooksToRefresh/);
+  assert.match(businessHook, /refreshWorkbookSet\(targets/);
+  assert.match(workbookHook, /SYNC_REQUIRED_USER_MESSAGE/);
+
+  const sales = "00000000-0000-0000-0000-000000000015";
+  const inventory = "00000000-0000-0000-0000-000000000014";
+  const targets = resolveWorkbooksToRefresh(
+    { workbookId: sales, payload: { affects_workbooks: [sales, inventory] } },
+    [],
+    ALLOWED_WORKBOOKS,
+  );
+  assert.deepEqual(targets, [sales, inventory]);
+});
+
+test("resolveRelatedWorkbooksFromGraph uses non-contains edges", () => {
+  const sales = "00000000-0000-0000-0000-000000000015";
+  const inventory = "00000000-0000-0000-0000-000000000014";
+  const related = resolveRelatedWorkbooksFromGraph(
+    sales,
+    [
+      { source: sales, target: inventory, label: "reserves_stock_in" },
+      { source: sales, target: "cat-1", label: "contains" },
+    ],
+    ALLOWED_WORKBOOKS,
+  );
+  assert.deepEqual(related, [inventory]);
+});
+
+test("SYNC_REQUIRED user message is stable copy", () => {
+  assert.match(SYNC_REQUIRED_USER_MESSAGE, /out of sync with the server/i);
+});
+
+test("ci://tests/ui/sales-order-group-rendering — HDR/LINE grouping wired in grid", async () => {
+  const grouping = await import("../src/lib/salesOrderGrouping.ts");
+  const grid = fs.readFileSync(path.join(cwd, "src/components/SpreadsheetGrid.tsx"), "utf8");
+  const css = fs.readFileSync(path.join(cwd, "src/styles/globals.css"), "utf8");
+
+  const rows = [
+    { rowId: "SO-001-HDR", values: { order_id: "SO-001", customer_id: "c1", status: "SHIPPED" } },
+    { rowId: "SO-001-L1", values: { order_id: "SO-001", line_id: "1", qty: "2" } },
+    { rowId: "SO-001-L2", values: { order_id: "SO-001", line_id: "2", qty: "1" } },
+    { rowId: "SO-002-HDR", values: { order_id: "SO-002", customer_id: "c2", status: "DRAFT" } },
+    { rowId: "SO-002-L1", values: { order_id: "SO-002", line_id: "1", qty: "4" } },
+  ];
+
+  assert.equal(grouping.isSalesOrderHeaderRow("SO-001-HDR"), true);
+  assert.equal(grouping.isSalesOrderLineRow("SO-001-L1"), true);
+  assert.equal(grouping.salesOrderGroupKey("SO-001-L2"), "SO-001");
+  assert.equal(
+    grouping.shouldGroupSalesOrders(grouping.SALES_ORDERS_WORKBOOK_ID, rows),
+    true
+  );
+
+  const collapsed = new Set(["SO-001"]);
+  const visible = grouping.applySalesOrderCollapse(rows, collapsed);
+  assert.deepEqual(
+    visible.map((r) => r.rowId),
+    ["SO-001-HDR", "SO-002-HDR", "SO-002-L1"]
+  );
+
+  const groups = grouping.buildSalesOrderGroups(rows);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].lines.length, 2);
+
+  assert.match(grid, /shouldGroupSalesOrders/);
+  assert.match(grid, /spreadsheet-row--group-header/);
+  assert.match(grid, /summarizeSalesOrderHeader/);
+  assert.match(grid, /toggleCollapsedGroup/);
+  assert.match(css, /\.spreadsheet-row--group-header/);
+  assert.match(css, /\.spreadsheet-group-summary/);
+});
+
+test("ci://benchmarks/BENCH-UX-001 — virtual window projection stays within SLO", async () => {
+  const { runBenchUx001Projection, shouldVirtualizeGrid, VIRTUALIZATION_THRESHOLD } =
+    await import("../src/lib/gridVirtualization.ts");
+  const grid = fs.readFileSync(path.join(cwd, "src/components/SpreadsheetGrid.tsx"), "utf8");
+
+  const bench = runBenchUx001Projection();
+  assert.equal(bench.passed, true, `projection took ${bench.elapsedMs}ms`);
+  assert.equal(bench.rowCount, 100_000);
+  assert.equal(shouldVirtualizeGrid(VIRTUALIZATION_THRESHOLD), true);
+  assert.equal(shouldVirtualizeGrid(VIRTUALIZATION_THRESHOLD - 1), false);
+
+  assert.match(grid, /from "react-window"/);
+  assert.match(grid, /shouldVirtualizeGrid/);
+  assert.match(grid, /SpreadsheetVirtualRow/);
+});
+
+test("ci://tests/ui/glide-poc-cell-update-wiring — onCellEdited routes to onCellEdit", () => {
+  const poc = fs.readFileSync(path.join(cwd, "src/components/SpreadsheetGridGlidePoc.tsx"), "utf8");
+  assert.match(poc, /onCellEdited/);
+  assert.match(poc, /onCellEdit\(rowId, columnId, value\)/);
+  assert.match(poc, /cell\.update/);
+  assert.match(poc, /commandStates/);
 });

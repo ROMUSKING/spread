@@ -1,9 +1,9 @@
 # UI/UX Improvement & Alternative Development Paths Report
 
 **Document ID:** REP-UI-UX-PATHS-001  
-**Version:** 0.17.0  
+**Version:** 0.18.0  
 **Date:** 2026-06-30  
-**Status:** Under Review  
+**Status:** Accepted (Hybrid A+B)  
 **Author:** Antigravity AI  
 
 ---
@@ -12,29 +12,37 @@
 
 In a Spreadsheet-Native ERP, the User Experience (UX) determines whether the system feels like a clunky database wrapper or a fluid, empowering business operating system. Users expect the responsiveness, familiarity, and keyboard efficiency of Excel/Google Sheets, combined with the structured workflows and transaction safety of a modern ERP.
 
-This report audits the current UI/UX architecture, identifies major friction points, and outlines three distinct developmental paths to elevate the spreadsheet interface.
+This report audits the current UI/UX architecture, identifies friction points, and records the accepted developmental path for the v0.18.0 pack.
 
 ---
 
 ## 2. Current UI/UX Architecture Assessment
 
-The Spreadsheet-Native ERP v0.17.0 frontend is structured across three core visual elements:
+The Spreadsheet-Native ERP v0.18.0 frontend comprises:
 
-1. **SpreadsheetGrid (`SpreadsheetGrid.tsx`):** A custom React table rendering rows and columns from `current_cell_values`. Cell mutations invoke database transaction commands. Column widths are saved locally.
-2. **Tiled Workspace (`TiledWorkspace.tsx`):** Arranges Explorer, Grid, Graph, and Command panels side-by-side. Supports layout presets (e.g., OTC, Returns, Procurement).
-3. **Business Command Center (`BusinessCommandCenter.tsx`):** Side panel displaying forms for invoking high-level business mutations (e.g., `payment.record`, `fulfillment.allocate`).
+1. **SpreadsheetGrid (`SpreadsheetGrid.tsx`):** Custom React table; cell mutations invoke `cell.update` commands. Keyboard nav, range select, search, footer SUM shipped.
+2. **Tiled Workspace (`TiledWorkspace.tsx`):** Seven business presets with **resizable tile dividers** (pointer-capture splits). Grid, detail, explorer, graph, and actions tiles.
+3. **Business Command Center (`BusinessCommandCenter.tsx`):** Domain command forms (`payment.record`, `fulfillment.allocate`, etc.).
 
-### Current Limitations:
-- **No Virtualization:** Large workbooks (1,000+ rows) cause significant DOM inflation and rendering lag.
-- **Friction in Inline Editing:** Arrow key navigation is limited, and Excel conventions (e.g., double-clicking, Esc to abort edit, Tab to advance column, Enter to advance row) are not fully realized.
-- **Rigid Pane Layouts:** Tiled views are fixed. There is no support for dragging/resizing grid splits or floating/detaching panes.
-- **Pending/Ambiguous State Visuals:** Pending command states are simple indicator classes. They do not offer detailed popovers or micro-animations describing why a block is pending or failed.
+### Current limitations (accurate as of v0.18.0 audit)
+
+- **No virtualization:** Large workbooks (1,000+ rows) cause DOM inflation; BENCH-UX-001 blocked.
+- **Column metadata unused:** Server discovers `__type__`/`__enum__` meta; UI renders plain text.
+- **`cell.update` bypass:** Business-critical columns editable without domain command protection.
+- **Cross-workbook refresh manual:** No `affects_workbooks` outbox fan-out; hardcoded refresh lists.
+- **Column add stub:** "+" header is local-only; no server `column.add` command.
+- **Flattened order clutter:** SalesOrders header fields repeat per line; no client grouping.
+- **Pending state UX:** Overlays exist but ambiguity/`SYNC_REQUIRED` copy incomplete in some paths.
+- **`page.tsx` monolith:** Orchestration not yet extracted to hooks/`packages/ui`.
+
+### Shipped since initial draft (removed from gap list)
+
+- ~~Rigid pane layouts~~ — Resizable tile dividers shipped in `TiledWorkspace.tsx`.
+- ~~Limited Tab/Enter~~ — Tab wrap, Enter-down-on-commit, F2, type-to-enter shipped.
 
 ---
 
 ## 3. Alternative Development Paths
-
-To address these limitations, we evaluate three alternative development paths for the engineering team:
 
 ```mermaid
 graph TD
@@ -43,73 +51,76 @@ graph TD
     Start --> PathC[Path C: Headless Spreadsheet Sync]
 
     PathA --> A1[Virtualization via react-window]
-    PathA --> A2[Custom Keyboard Engine]
-    PathA --> A3[Grid Resizer Handles]
+    PathA --> A2[Extended Keyboard Engine]
+    PathA --> A3[packages/ui extraction]
 
-    PathB --> B1[Glide Data Grid - Canvas]
-    B2[Luckysheet / Handsontable]
+    PathB --> B1[Glide Data Grid POC]
 
-    PathC --> C1[Headless State Sync]
-    PathC --> C2[Custom Component Shells]
+    PathC --> C1[Rejected for Phase 0]
 ```
 
----
-
 ### Path A: Native Custom Evolution (Incremental Upgrade)
-This path focuses on iteratively upgrading our existing custom React components, keeping the dependency footprint minimal and maintaining total control over styling and layout.
 
-* **Key Deliverables:**
-  1. **Grid Virtualization:** Integrate `react-window` or `react-virtualized` to render only the visible viewport of cells, allowing millions of cells to load smoothly.
-  2. **Extended Shortcut Engine:** Implement an Excel-compliant keyboard state machine supporting Ctrl+Arrow jumps, Shift+Arrow cell range selection, and Tab/Enter cell cycling.
-  3. **Resizable Panes:** Replace the static CSS Grid in `TiledWorkspace` with resizable pane layouts using `@allotment/react` or `react-resizable-panels`.
-* **Pros:** Complete styling control; zero risk of license conflicts; very easy to keep Phase 0 compliant.
-* **Cons:** High development cost to recreate complex grid capabilities (selection boxes, copy-paste buffers, and filters).
+- Grid virtualization via `react-window`
+- Extended shortcut engine (Ctrl+Arrow, Shift+Arrow range)
+- Extract shared components to `packages/ui`
 
----
+**Pros:** Full styling control; zero license risk; Phase 0 compliant.  
+**Cons:** High cost to match Excel copy-paste, filters, and advanced selection.
 
-### Path B: Integrating Specialized Grid Engines (Glide Data Grid / Luckysheet)
-This path replaces the custom `SpreadsheetGrid` with a professional-grade open-source grid engine optimized for performance or sheets fidelity.
+### Path B: Glide Data Grid POC
 
-* **Option 1: Glide Data Grid (Recommended for Performance)**
-  - A canvas-based, hyper-fast grid engine developed by Glide. It easily renders 1,000,000+ rows, supports native column resizing, cell editing, and selection boxes.
-* **Option 2: Luckysheet or Handsontable (Recommended for Google Sheets Fidelity)**
-  - High-feature spreadsheet engines that support complex formulas, cell styling, chart embedding, and range selections out of the box.
-* **Pros:** Instant access to advanced grid features (sorting, filtering, rich data cell types, bulk selections); near-perfect performance.
-* **Cons:** High integration complexity; styling may clash with custom CSS design tokens; potential bundle size inflation.
+Canvas-based grid; wire `onCellEdited` → `cell.update`. Evaluate per ADR-0028.
+
+**Pros:** Near-native performance at scale.  
+**Cons:** Integration complexity; theme alignment work.
+
+### Path C: Headless Spreadsheet Architecture
+
+**Rejected for Phase 0:** Conflicts with per-command identity, ambiguity recovery, and command_log model.
 
 ---
 
-### Path C: Headless Spreadsheet Architecture (Airtable-Style)
-This path decouples the grid UI from the data plane, turning the frontend grid into a "headless viewer" that communicates changes to a local state manager, which asynchronously flushes commands to the backend API.
+## 4. Evaluation Matrix
 
-* **Key Deliverables:**
-  1. **Headless State Manager:** Maintains a local memory replica of the cells.
-  2. **Batch Transaction Queue:** Aggregates individual cell updates into a transaction and submits them via the `/commands` API.
-  3. **Visual Optimistic Layer:** Renders values immediately in green/blue states, sliding them into committed states once the outbox SSE broadcasts success.
-* **Pros:** Highly responsive UI/UX; offline-first capability; decoupling of cell state from rendering layers.
-* **Cons:** Extremely complex state synchronization and conflict resolution logic.
-
----
-
-## 4. Evaluation and Comparison Matrix
-
-| Criteria | Path A: Native Custom | Path B: Grid Engine (Glide) | Path C: Headless Sync |
+| Criteria | Path A | Path B (Glide POC) | Path C |
 |---|---|---|---|
-| **Development Cost** | Medium-High (Custom logic) | Medium (Integration work) | High (Sync protocols) |
-| **Performance (Scale)** | Good (with virtualization) | Excellent (Canvas-backed) | Excellent (Offline-first) |
-| **UX Polish & Excel Feel**| Medium (Requires iteration)| High (Native Excel features) | High (Instant response) |
-| **Phase 0 Compatibility**| 100% (Direct wrapper) | 100% (Wired to commands) | 80% (Requires buffer changes) |
-| **Styling & Theme Control**| Maximum | Good (via canvas theme API)| Maximum |
+| Development cost | Medium-High | Medium | High |
+| Performance | Good (with virtualization) | Excellent | Excellent |
+| Excel feel | Medium | High | High |
+| Phase 0 compatibility | 100% | 100% (if wired to commands) | 80% |
+| Styling control | Maximum | Good | Maximum |
 
 ---
 
-## 5. Recommendation Action Plan
+## 5. Accepted Action Plan (v0.18.0)
 
-For the immediate next steps, we recommend a **Hybrid Approach (Path A + Path B)**:
+**Hybrid A+B** plus command-synergistic enhancements from `docs/data/sme-ecommerce-schema-critical-review-and-ux-alternatives.md`:
 
-1. **Phase 1 (Immediate UX Wins):**
-   - Implement resizable workspace tiles using `react-resizable-panels` in `TiledWorkspace.tsx`.
-   - Update `SpreadsheetGrid` to handle basic Tab/Enter arrow navigation.
-2. **Phase 2 (Scalability Proof of Concept):**
-   - Prototype a branch replacing `SpreadsheetGrid` with **Glide Data Grid**, wiring the `onCellEdited` callback to our existing `cell.update` command pipeline.
-   - Audit rendering performance with a 10,000-row test dataset.
+### Phase 1 — UX synergy (AGENT-061..063)
+
+1. Column metadata rendering (enum, currency, read-only/protected hints).
+2. `affects_workbooks` cross-workbook tile auto-refresh.
+3. Flattened SalesOrders client grouping + HDR row styling.
+4. Action column prototype for one domain command.
+
+### Phase 2 — Scale and structure (AGENT-064..065)
+
+1. `react-window` virtualization in main path.
+2. Glide Data Grid POC branch per ADR-0028.
+3. Extract `packages/ui`; refactor `page.tsx` into hooks.
+
+### Phase 3 — Gate evidence
+
+1. AGENT-090 vertical slice acceptance.
+2. BENCH-UX-001..003 benchmarks.
+3. P1-UX-001 tiled workspace spike.
+
+---
+
+## 6. References
+
+- `spec/spreadsheet_native_erp_technical_spec_v0_18_0_research_driven_phase0_ui_ux_audit_complete_execution.md` §11
+- `docs/ui/spreadsheet-native-ux-specification.md`
+- `docs/adr/ADR-0028-grid-engine-dar.md`
+- `docs/implementation/phase0-agent-work-orders.md` (AGENT-061..065)

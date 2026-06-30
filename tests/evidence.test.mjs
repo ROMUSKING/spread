@@ -77,7 +77,7 @@ test('ci://tests/process/agent-pr-template-present', () => {
 
 test('ci://tests/security/invariant-manifest-validation', () => {
   const content = fs.readFileSync('invariants/security-invariants.yml', 'utf8');
-  assert.ok(content.includes('version: 0.17.1'));
+  assert.ok(content.includes('version: 0.18.0'));
 });
 
 test('ci://tests/security/evidence-uri-scheme-validation', () => {

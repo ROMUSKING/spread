@@ -1,4 +1,4 @@
-version: 0.17.1
+version: 0.18.0
 last_reviewed: '2026-06-26'
 invariants:
 - id: AC-001
@@ -925,7 +925,7 @@ invariants:
   evidenceUri: ci://tests/process/snapshot-first-read-present
   owner: Engineering Lead
   appliesTo:
-  - docs/snapshot-v0.17.0.md
+  - docs/snapshot-v0.18.0.md
   - README.md
   - docs/pack-index.md
   - P0-EXEC-001
@@ -971,7 +971,7 @@ invariants:
   appliesTo:
   - README.md
   - docs/pack-index.md
-  - docs/snapshot-v0.17.0.md
+  - docs/snapshot-v0.18.0.md
 - id: EXEC-009
   title: Agent simulation output is attached and rejects unsafe PR patterns
   category: execution_governance
@@ -1035,7 +1035,7 @@ invariants:
   evidenceUri: ci://tests/process/snapshot-repository-tree-visible
   owner: Engineering Lead
   appliesTo:
-  - docs/snapshot-v0.17.0.md
+  - docs/snapshot-v0.18.0.md
 - id: EXEC-013
   title: Repository stubs pass bootstrap smoke typecheck
   category: execution_governance
@@ -1094,7 +1094,7 @@ invariants:
   owner: Engineering Lead
   appliesTo:
   - docs/qa/bootstrap-completion-evidence-v0.17.0.md
-  - docs/snapshot-v0.17.0.md
+  - docs/snapshot-v0.18.0.md
 - id: SNAP-004
   title: Snapshot declares bootstrap achieved and next work-order path
   category: execution_governance
@@ -1103,7 +1103,7 @@ invariants:
   evidenceUri: ci://tests/docs/snapshot-bootstrap-achieved-note
   owner: Engineering Lead
   appliesTo:
-  - docs/snapshot-v0.17.0.md
+  - docs/snapshot-v0.18.0.md
 - id: DOC-003
   title: Vertical-slice release note template exists before implementation handoff
   category: documentation_hygiene

@@ -3,7 +3,7 @@
 Active first-read artifact:
 
 ```text
-docs/snapshot-v0.17.0.md
+docs/snapshot-v0.18.0.md
 ```
 
 Active pack index:

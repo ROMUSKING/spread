@@ -2,9 +2,50 @@
  * Spreadsheet grid: cell edits route through onCellEdit → command_api.
  * Column widths are client-only preferences (localStorage); not server mutations.
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { List, type RowComponentProps } from "react-window";
+import type { GridColumn } from "@erp/contracts/grid-column";
 import { cellStatusClass, resolveColumnWidth as resolveWidth } from "../lib/gridUtils";
+import {
+  formatDisplayValue,
+  isColumnEditable,
+  protectedCellTitle,
+} from "../lib/columnMetaUtils";
 import { EMPTY_STATE_COPY } from "../lib/emptyStateCopy";
+import {
+  applySalesOrderCollapse,
+  isSalesOrderHeaderRow,
+  lineCountForGroup,
+  salesOrderGroupKey,
+  shouldGroupSalesOrders,
+  summarizeSalesOrderHeader,
+  toggleCollapsedGroup,
+} from "../lib/salesOrderGrouping";
+import {
+  shouldVirtualizeGrid,
+  VIRTUAL_ROW_HEIGHT,
+} from "../lib/gridVirtualization";
+import { CellValueEditor } from "@erp/ui/CellValueEditor";
+
+export type { GridColumn };
+
+type VirtualRowProps = {
+  renderBodyRow: (rIdx: number) => ReactNode;
+};
+
+function SpreadsheetVirtualRow({
+  index,
+  style,
+  renderBodyRow,
+}: RowComponentProps<VirtualRowProps>) {
+  return (
+    <div style={style} className="spreadsheet-virtual-row-host">
+      <table className="spreadsheet-table spreadsheet-table--virtual-slice">
+        <tbody>{renderBodyRow(index)}</tbody>
+      </table>
+    </div>
+  );
+}
 
 export type CommandState = {
   state: "pending" | "committed" | "rejected" | "ambiguous_requires_refresh";
@@ -15,11 +56,6 @@ export type CommandState = {
 export type GridRow = {
   rowId: string;
   values: Record<string, string>;
-};
-
-export type GridColumn = {
-  columnId: string;
-  label: string;
 };
 
 export type SpreadsheetGridProps = {
@@ -69,6 +105,7 @@ export function SpreadsheetGrid({
   const [selectionStart, setSelectionStart] = useState<{ rowIndex: number; colIndex: number } | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<{ rowIndex: number; colIndex: number } | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const newColInputRef = useRef<HTMLInputElement>(null);
@@ -78,18 +115,41 @@ export function SpreadsheetGrid({
   const draftWidthsRef = useRef<Record<string, number>>({});
   const resizePointerIdRef = useRef<number | null>(null);
   const resizeHandleRef = useRef<HTMLElement | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const keyboardRef = useRef<HTMLDivElement>(null);
+  const [listHeight, setListHeight] = useState(320);
+
+  const groupingEnabled = shouldGroupSalesOrders(workbookId, rows);
+  const groupedRows = groupingEnabled ? applySalesOrderCollapse(rows, collapsedGroups) : rows;
 
   const filteredRows = searchQuery
-    ? rows.filter((row) =>
+    ? groupedRows.filter((row) =>
         Object.values(row.values).some((val) =>
           String(val).toLowerCase().includes(searchQuery.toLowerCase())
         )
       )
-    : rows;
+    : groupedRows;
 
   const emptyRowIndex = filteredRows.length;
   const totalRowCount = filteredRows.length + 1;
+  const useVirtualizedBody = shouldVirtualizeGrid(totalRowCount);
   const canResize = Boolean(workbookId && onColumnWidthChange);
+
+  useEffect(() => {
+    if (!useVirtualizedBody) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const updateHeight = () => {
+      const next = Math.max(160, el.clientHeight - 8);
+      setListHeight(next);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [useVirtualizedBody]);
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -253,9 +313,9 @@ export function SpreadsheetGrid({
       }
 
       setEditingCell(null);
-      tableRef.current?.focus();
+      (useVirtualizedBody ? keyboardRef : tableRef).current?.focus();
     },
-    [editingCell, onCellEdit, onCreateRow]
+    [editingCell, onCellEdit, onCreateRow, useVirtualizedBody]
   );
 
   useEffect(() => {
@@ -351,7 +411,7 @@ export function SpreadsheetGrid({
 
       if (!row) return;
       const col = columns[colIndex];
-      if (!col) return;
+      if (!col || !isColumnEditable(col)) return;
 
       const currentVal =
         initialValue !== undefined ? initialValue : row.values[col.columnId] || "";
@@ -383,12 +443,22 @@ export function SpreadsheetGrid({
     enterEditMode(rowIndex, colIndex);
   };
 
-  const handleGutterClick = (rowIndex: number) => {
-    if (rowIndex < rows.length) {
-      setSelectedRow(rowIndex);
-      setActiveCell({ rowIndex, colIndex: 0 });
-      onGutterClick?.(rowIndex);
+  const handleGroupToggle = (groupKey: string) => {
+    setCollapsedGroups((prev) => toggleCollapsedGroup(prev, groupKey));
+  };
+
+  const handleGutterClick = (rowIndex: number, row: GridRow | null) => {
+    if (!row || rowIndex >= filteredRows.length) return;
+
+    const groupKey = groupingEnabled ? salesOrderGroupKey(row.rowId) : null;
+    if (groupKey && isSalesOrderHeaderRow(row.rowId)) {
+      handleGroupToggle(groupKey);
+      return;
     }
+
+    setSelectedRow(rowIndex);
+    setActiveCell({ rowIndex, colIndex: 0 });
+    onGutterClick?.(rowIndex);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -494,7 +564,7 @@ export function SpreadsheetGrid({
         {
           const row = getRowAt(rowIndex);
           const col = columns[colIndex];
-          if (row && col && row.values[col.columnId]) {
+          if (row && col && isColumnEditable(col) && row.values[col.columnId]) {
             onCellEdit(row.rowId, col.columnId, "");
           }
         }
@@ -520,18 +590,19 @@ export function SpreadsheetGrid({
     }
     setNewColumnName("");
     setAddingColumn(false);
-    tableRef.current?.focus();
+    (useVirtualizedBody ? keyboardRef : tableRef).current?.focus();
   };
 
   const columnSums: Record<string, number | null> = {};
   for (const col of columns) {
     let sum = 0;
     let hasNumeric = false;
+    const treatAsNumeric = col.type === "number" || col.format === "currency";
     for (const row of rows) {
       const val = row.values[col.columnId];
       if (val !== undefined && val !== "") {
         const num = Number(val);
-        if (Number.isFinite(num)) {
+        if (Number.isFinite(num) && (treatAsNumeric || !col.type)) {
           sum += num;
           hasNumeric = true;
         }
@@ -539,6 +610,329 @@ export function SpreadsheetGrid({
     }
     columnSums[col.columnId] = hasNumeric ? sum : null;
   }
+
+  const renderBodyRow = useCallback(
+    (rIdx: number): ReactNode => {
+      const row = getRowAt(rIdx);
+      const isEmptyRow = rIdx === emptyRowIndex;
+      const isRowSelected = selectedRow === rIdx;
+      const displayRowNum = rIdx + 1;
+      const isGroupHeader = !!row && groupingEnabled && isSalesOrderHeaderRow(row.rowId);
+      const groupKey = row && groupingEnabled ? salesOrderGroupKey(row.rowId) : null;
+      const isCollapsed = groupKey ? collapsedGroups.has(groupKey) : false;
+      const lineCount = groupKey && isGroupHeader ? lineCountForGroup(rows, groupKey) : 0;
+
+      return (
+        <tr
+          key={row ? row.rowId : "__empty__"}
+          role="row"
+          className={isGroupHeader ? "spreadsheet-row--group-header" : undefined}
+          style={{
+            background: isGroupHeader
+              ? "var(--color-bg-elevated)"
+              : isRowSelected
+              ? "var(--color-bg-active)"
+              : isEmptyRow
+              ? "var(--color-bg-muted)"
+              : rIdx % 2 === 1
+              ? "var(--color-bg-muted)"
+              : "transparent",
+          }}
+        >
+          <td
+            className={`spreadsheet-gutter ${isGroupHeader ? "spreadsheet-gutter--group" : ""}`}
+            onClick={() => handleGutterClick(rIdx, row)}
+            style={{
+              cursor: isEmptyRow ? "default" : "pointer",
+              fontWeight: isRowSelected || isGroupHeader ? 600 : 400,
+              color: isRowSelected ? "var(--color-accent)" : "var(--color-text-muted)",
+            }}
+            title={
+              isEmptyRow
+                ? undefined
+                : isGroupHeader
+                ? `${isCollapsed ? "Expand" : "Collapse"} order ${groupKey} (${lineCount} lines)`
+                : `Select row ${displayRowNum}`
+            }
+          >
+            {isEmptyRow ? (
+              ""
+            ) : isGroupHeader ? (
+              <span className="spreadsheet-group-toggle" aria-hidden="true">
+                {isCollapsed ? "▶" : "▼"}
+              </span>
+            ) : (
+              displayRowNum
+            )}
+          </td>
+
+          {columns.map((col, cIdx) => {
+            const rowId = row?.rowId || "__empty__";
+            const wb = workbookId || "";
+            const cellId = wb ? `${wb}:${rowId}:${col.columnId}` : `${rowId}:${col.columnId}`;
+            const cmdState = commandStates.get(cellId);
+            const rawVal = row?.values[col.columnId] || "";
+            const displayVal =
+              cmdState && cmdState.state !== "rejected" ? cmdState.value : rawVal;
+
+            const isActive =
+              activeCell.rowIndex === rIdx &&
+              activeCell.colIndex === cIdx &&
+              selectedRow === null;
+
+            const isEditing =
+              editingCell &&
+              (editingCell.rowId === rowId ||
+                (editingCell.rowId === "__new_row__" && isEmptyRow)) &&
+              editingCell.columnId === col.columnId;
+
+            const width = resolveColumnWidth(col.columnId);
+            const statusClass = cellStatusClass(cmdState?.state);
+            const editable = isColumnEditable(col);
+            const protectedTitle = protectedCellTitle(col);
+            const tooltipText =
+              protectedTitle ||
+              (cmdState?.state === "pending"
+                ? "Saving"
+                : cmdState?.state === "rejected"
+                ? cmdState.error || "Rejected"
+                : cmdState?.state === "ambiguous_requires_refresh"
+                ? "Refresh required"
+                : "");
+
+            const rangeClasses = getCellRangeClasses(rIdx, cIdx);
+            const formattedDisplay =
+              !isEditing && displayVal ? formatDisplayValue(displayVal, col) : displayVal;
+
+            return (
+              <td
+                key={col.columnId}
+                role="gridcell"
+                aria-selected={isActive}
+                tabIndex={-1}
+                className={`spreadsheet-cell ${statusClass} ${isActive && !editingCell ? "spreadsheet-cell--active" : ""} ${!editable ? "spreadsheet-cell--protected" : ""} ${rangeClasses}`}
+                style={{
+                  minWidth: width,
+                  width,
+                  textAlign: cIdx === 0 ? "left" : "right",
+                  color: isEmptyRow && !isEditing ? "var(--color-text-muted)" : "var(--color-text)",
+                  fontStyle: isEmptyRow && !isEditing ? "italic" : "normal",
+                }}
+                onMouseDown={(e) => handleCellMouseDown(rIdx, cIdx, e)}
+                onMouseEnter={() => handleCellMouseEnter(rIdx, cIdx)}
+                onClick={() => handleCellClick(rIdx, cIdx)}
+                onDoubleClick={() => handleCellDoubleClick(rIdx, cIdx)}
+                title={tooltipText}
+              >
+                {isEditing && editable ? (
+                  <CellValueEditor
+                    column={col}
+                    value={editingCell.value}
+                    editing
+                    onChange={(next) => setEditingCell({ ...editingCell, value: next })}
+                    onCommit={() => {
+                      if (editHandledRef.current) {
+                        editHandledRef.current = false;
+                        return;
+                      }
+                      finishEditing("commit");
+                    }}
+                    onCancel={() => finishEditing("cancel")}
+                    inputRef={inputRef}
+                    textAlign={cIdx === 0 ? "left" : "right"}
+                    stopPropagationOnKey
+                  />
+                ) : (
+                  <span style={{ display: "inline-block", width: "100%" }}>
+                    {isGroupHeader && cIdx === 0 && !isEditing ? (
+                      <span className="spreadsheet-group-summary">
+                        <span className="spreadsheet-group-summary__title">
+                          {summarizeSalesOrderHeader(row!)}
+                        </span>
+                        <span className="spreadsheet-group-summary__meta">
+                          {lineCount} line{lineCount === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                    ) : isEmptyRow && !displayVal ? (
+                      cIdx === 0 ? (
+                        "Type to add row"
+                      ) : (
+                        ""
+                      )
+                    ) : (
+                      formattedDisplay
+                    )}
+                    {!editable && !isEmptyRow && (
+                      <span className="spreadsheet-cell__lock" aria-hidden="true" title={protectedTitle}>
+                        🔒
+                      </span>
+                    )}
+                    {cmdState?.state === "pending" && (
+                      <span className="status-dot status-dot--pending" aria-label="pending" />
+                    )}
+                    {cmdState?.state === "ambiguous_requires_refresh" && (
+                      <span className="status-dot status-dot--ambiguous" aria-label="ambiguous" />
+                    )}
+                    {cmdState?.state === "rejected" && (
+                      <span className="status-dot status-dot--rejected" aria-label="rejected" />
+                    )}
+                  </span>
+                )}
+              </td>
+            );
+          })}
+
+          <td style={{ minWidth: 48, background: "var(--color-bg-muted)" }} />
+        </tr>
+      );
+    },
+    [
+      getRowAt,
+      emptyRowIndex,
+      selectedRow,
+      groupingEnabled,
+      collapsedGroups,
+      rows,
+      columns,
+      workbookId,
+      commandStates,
+      activeCell,
+      editingCell,
+      resolveColumnWidth,
+      getCellRangeClasses,
+      handleGutterClick,
+      handleCellMouseDown,
+      handleCellMouseEnter,
+      handleCellClick,
+      handleCellDoubleClick,
+      finishEditing,
+    ]
+  );
+
+  const renderTableHead = () => (
+    <thead className="spreadsheet-header">
+      <tr role="row">
+        <th scope="col" className="spreadsheet-gutter">
+          #
+        </th>
+        {columns.map((col, idx) => {
+          const width = resolveColumnWidth(col.columnId);
+          return (
+            <th
+              key={col.columnId}
+              role="columnheader"
+              scope="col"
+              style={{
+                minWidth: width,
+                width,
+                textAlign: idx === 0 ? "left" : "right",
+              }}
+            >
+              {col.label}
+              {canResize && (
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={`Resize ${col.label} column`}
+                  className={`spreadsheet-resize-handle ${
+                    resizingColumn === col.columnId ? "spreadsheet-resize-handle--active" : ""
+                  }`}
+                  onPointerDown={(e) => startColumnResize(col.columnId, e)}
+                />
+              )}
+            </th>
+          );
+        })}
+        <th
+          style={{
+            width: 48,
+            minWidth: 48,
+            textAlign: "center",
+            cursor: "pointer",
+            color: "var(--color-text-muted)",
+            background: addingColumn ? "var(--color-bg-hover)" : "var(--color-bg-muted)",
+          }}
+          onClick={() => setAddingColumn(true)}
+          title="Add column"
+        >
+          {addingColumn ? (
+            <input
+              ref={newColInputRef}
+              type="text"
+              className="input input--sm"
+              value={newColumnName}
+              onChange={(e) => setNewColumnName(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddColumnSubmit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setNewColumnName("");
+                  setAddingColumn(false);
+                  (useVirtualizedBody ? keyboardRef : tableRef).current?.focus();
+                }
+              }}
+              onBlur={handleAddColumnSubmit}
+              placeholder="Name"
+              style={{ width: 80 }}
+            />
+          ) : (
+            "+"
+          )}
+        </th>
+      </tr>
+    </thead>
+  );
+
+  const renderTableFoot = () =>
+    rows.length > 0 ? (
+      <tfoot className="spreadsheet-footer">
+        <tr>
+          <td
+            className="spreadsheet-gutter"
+            style={{
+              fontSize: "var(--font-size-sm)",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Sum
+          </td>
+          {columns.map((col, cIdx) => {
+            const sum = columnSums[col.columnId] ?? null;
+            const width = resolveColumnWidth(col.columnId);
+            return (
+              <td
+                key={col.columnId}
+                style={{
+                  minWidth: width,
+                  width,
+                  textAlign: cIdx === 0 ? "left" : "right",
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                  color: sum !== null ? "var(--color-text)" : "var(--color-text-muted)",
+                }}
+              >
+                {sum !== null
+                  ? cIdx === 0
+                    ? `${rows.length} rows`
+                    : sum % 1 === 0
+                    ? sum.toLocaleString()
+                    : sum.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
+                  : ""}
+              </td>
+            );
+          })}
+          <td style={{ minWidth: 48 }} />
+        </tr>
+      </tfoot>
+    ) : null;
 
   if (columns.length === 0) {
     return (
@@ -569,277 +963,44 @@ export function SpreadsheetGrid({
           </span>
         )}
       </div>
-      <div className="spreadsheet-scroll">
-        <table
-          ref={tableRef}
-          role="grid"
-          aria-label="Spreadsheet editor"
-          tabIndex={0}
-          onKeyDown={handleKeyDown}
-          className="spreadsheet-table"
-        >
-          <thead className="spreadsheet-header">
-            <tr role="row">
-              <th scope="col" className="spreadsheet-gutter">
-                #
-              </th>
-              {columns.map((col, idx) => {
-                const width = resolveColumnWidth(col.columnId);
-                return (
-                  <th
-                    key={col.columnId}
-                    role="columnheader"
-                    scope="col"
-                    style={{
-                      minWidth: width,
-                      width,
-                      textAlign: idx === 0 ? "left" : "right",
-                    }}
-                  >
-                    {col.label}
-                    {canResize && (
-                      <span
-                        role="separator"
-                        aria-orientation="vertical"
-                        aria-label={`Resize ${col.label} column`}
-                        className={`spreadsheet-resize-handle ${
-                          resizingColumn === col.columnId ? "spreadsheet-resize-handle--active" : ""
-                        }`}
-                        onPointerDown={(e) => startColumnResize(col.columnId, e)}
-                      />
-                    )}
-                  </th>
-                );
-              })}
-              <th
-                style={{
-                  width: 48,
-                  minWidth: 48,
-                  textAlign: "center",
-                  cursor: "pointer",
-                  color: "var(--color-text-muted)",
-                  background: addingColumn ? "var(--color-bg-hover)" : "var(--color-bg-muted)",
-                }}
-                onClick={() => setAddingColumn(true)}
-                title="Add column"
-              >
-                {addingColumn ? (
-                  <input
-                    ref={newColInputRef}
-                    type="text"
-                    className="input input--sm"
-                    value={newColumnName}
-                    onChange={(e) => setNewColumnName(e.target.value)}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddColumnSubmit();
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        setNewColumnName("");
-                        setAddingColumn(false);
-                        tableRef.current?.focus();
-                      }
-                    }}
-                    onBlur={handleAddColumnSubmit}
-                    placeholder="Name"
-                    style={{ width: 80 }}
-                  />
-                ) : (
-                  "+"
-                )}
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {Array.from({ length: totalRowCount }, (_, rIdx) => {
-              const row = getRowAt(rIdx);
-              const isEmptyRow = rIdx === emptyRowIndex;
-              const isRowSelected = selectedRow === rIdx;
-              const displayRowNum = rIdx + 1;
-
-              return (
-                <tr
-                  key={row ? row.rowId : "__empty__"}
-                  role="row"
-                  style={{
-                    background: isRowSelected
-                      ? "var(--color-bg-active)"
-                      : isEmptyRow
-                      ? "var(--color-bg-muted)"
-                      : rIdx % 2 === 1
-                      ? "var(--color-bg-muted)"
-                      : "transparent",
-                  }}
-                >
-                  <td
-                    className="spreadsheet-gutter"
-                    onClick={() => handleGutterClick(rIdx)}
-                    style={{
-                      cursor: isEmptyRow ? "default" : "pointer",
-                      fontWeight: isRowSelected ? 600 : 400,
-                      color: isRowSelected ? "var(--color-accent)" : "var(--color-text-muted)",
-                    }}
-                    title={isEmptyRow ? undefined : `Select row ${displayRowNum}`}
-                  >
-                    {isEmptyRow ? "" : displayRowNum}
-                  </td>
-
-                  {columns.map((col, cIdx) => {
-                    const rowId = row?.rowId || "__empty__";
-                    const wb = workbookId || "";
-                    const cellId = wb
-                      ? `${wb}:${rowId}:${col.columnId}`
-                      : `${rowId}:${col.columnId}`;
-                    const cmdState = commandStates.get(cellId);
-                    const rawVal = row?.values[col.columnId] || "";
-                    const displayVal =
-                      cmdState && cmdState.state !== "rejected" ? cmdState.value : rawVal;
-
-                    const isActive =
-                      activeCell.rowIndex === rIdx &&
-                      activeCell.colIndex === cIdx &&
-                      selectedRow === null;
-
-                    const isEditing =
-                      editingCell &&
-                      (editingCell.rowId === rowId ||
-                        (editingCell.rowId === "__new_row__" && isEmptyRow)) &&
-                      editingCell.columnId === col.columnId;
-
-                    const width = resolveColumnWidth(col.columnId);
-                    const statusClass = cellStatusClass(cmdState?.state);
-                    const tooltipText =
-                      cmdState?.state === "pending"
-                        ? "Saving"
-                        : cmdState?.state === "rejected"
-                        ? cmdState.error || "Rejected"
-                        : cmdState?.state === "ambiguous_requires_refresh"
-                        ? "Refresh required"
-                        : "";
-
-                    const rangeClasses = getCellRangeClasses(rIdx, cIdx);
-
-                    return (
-                      <td
-                        key={col.columnId}
-                        role="gridcell"
-                        aria-selected={isActive}
-                        tabIndex={-1}
-                        className={`spreadsheet-cell ${statusClass} ${isActive && !editingCell ? "spreadsheet-cell--active" : ""} ${rangeClasses}`}
-                        style={{
-                          minWidth: width,
-                          width,
-                          textAlign: cIdx === 0 ? "left" : "right",
-                          color: isEmptyRow && !isEditing ? "var(--color-text-muted)" : "var(--color-text)",
-                          fontStyle: isEmptyRow && !isEditing ? "italic" : "normal",
-                        }}
-                        onMouseDown={(e) => handleCellMouseDown(rIdx, cIdx, e)}
-                        onMouseEnter={() => handleCellMouseEnter(rIdx, cIdx)}
-                        onClick={() => handleCellClick(rIdx, cIdx)}
-                        onDoubleClick={() => handleCellDoubleClick(rIdx, cIdx)}
-                        title={tooltipText}
-                      >
-                        {isEditing ? (
-                          <input
-                            ref={inputRef}
-                            type="text"
-                            className="input input--sm"
-                            value={editingCell.value}
-                            onChange={(e) =>
-                              setEditingCell({ ...editingCell, value: e.target.value })
-                            }
-                            onBlur={() => {
-                              if (editHandledRef.current) {
-                                editHandledRef.current = false;
-                                return;
-                              }
-                              finishEditing("commit");
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key !== "Enter" && e.key !== "Escape" && e.key !== "Tab") {
-                                e.stopPropagation();
-                              }
-                            }}
-                            style={{ textAlign: cIdx === 0 ? "left" : "right" }}
-                          />
-                        ) : (
-                          <span style={{ display: "inline-block", width: "100%" }}>
-                            {isEmptyRow && !displayVal
-                              ? cIdx === 0
-                                ? "Type to add row"
-                                : ""
-                              : displayVal}
-                            {cmdState?.state === "pending" && (
-                              <span className="status-dot status-dot--pending" aria-label="pending" />
-                            )}
-                            {cmdState?.state === "ambiguous_requires_refresh" && (
-                              <span className="status-dot status-dot--ambiguous" aria-label="ambiguous" />
-                            )}
-                            {cmdState?.state === "rejected" && (
-                              <span className="status-dot status-dot--rejected" aria-label="rejected" />
-                            )}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
-
-                  <td style={{ minWidth: 48, background: "var(--color-bg-muted)" }} />
-                </tr>
-              );
-            })}
-          </tbody>
-
-          {rows.length > 0 && (
-            <tfoot className="spreadsheet-footer">
-              <tr>
-                <td
-                  className="spreadsheet-gutter"
-                  style={{
-                    fontSize: "var(--font-size-sm)",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  Sum
-                </td>
-                {columns.map((col, cIdx) => {
-                  const sum = columnSums[col.columnId] ?? null;
-                  const width = resolveColumnWidth(col.columnId);
-                  return (
-                    <td
-                      key={col.columnId}
-                      style={{
-                        minWidth: width,
-                        width,
-                        textAlign: cIdx === 0 ? "left" : "right",
-                        fontWeight: 600,
-                        fontVariantNumeric: "tabular-nums",
-                        color: sum !== null ? "var(--color-text)" : "var(--color-text-muted)",
-                      }}
-                    >
-                      {sum !== null
-                        ? cIdx === 0
-                          ? `${rows.length} rows`
-                          : sum % 1 === 0
-                          ? sum.toLocaleString()
-                          : sum.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })
-                        : ""}
-                    </td>
-                  );
-                })}
-                <td style={{ minWidth: 48 }} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+      <div className="spreadsheet-scroll" ref={scrollRef}>
+        {useVirtualizedBody ? (
+          <div
+            ref={keyboardRef}
+            className="spreadsheet-keyboard-host"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+          >
+            <table className="spreadsheet-table" role="grid" aria-label="Spreadsheet editor">
+              {renderTableHead()}
+            </table>
+            <List
+              className="spreadsheet-virtual-list"
+              style={{ height: listHeight }}
+              rowCount={totalRowCount}
+              rowHeight={VIRTUAL_ROW_HEIGHT}
+              overscanCount={8}
+              rowProps={{ renderBodyRow }}
+              rowComponent={SpreadsheetVirtualRow}
+            />
+            <table className="spreadsheet-table">{renderTableFoot()}</table>
+          </div>
+        ) : (
+          <table
+            ref={tableRef}
+            role="grid"
+            aria-label="Spreadsheet editor"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            className="spreadsheet-table"
+          >
+            {renderTableHead()}
+            <tbody>
+              {Array.from({ length: totalRowCount }, (_, rIdx) => renderBodyRow(rIdx))}
+            </tbody>
+            {renderTableFoot()}
+          </table>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
-version: 0.17.1
+version: 0.18.0
 last_reviewed: '2026-06-26'
-status: v0.17.0 runnable project bootstrap baseline
+status: v0.18.0 UI/UX audit closure baseline
 datasets:
   pilot: pilot-v1-small
   batch_fixtures: tests/fixtures/batch

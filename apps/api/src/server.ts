@@ -51,6 +51,11 @@ import {
 import type { CommandEnvelope } from '@erp/domain/commands/types';
 import { RateLimiter } from './http/RateLimiter';
 import { isAllowedWorkbook } from '@erp/contracts/workbooks';
+import {
+  buildWorkbookColumnsFromCells,
+  isMetaRowId,
+  type CellRow,
+} from '@erp/contracts/grid-column';
 
 // Ensure Phase 0 flags (post-MVP off)
 assertPhase0RuntimeFlags();
@@ -398,14 +403,9 @@ export async function startApi(): Promise<void> {
           [tenantId, workbookId],
         );
 
-        const cellRows = result?.rows || result || [];
-        // Lightweight column meta convention support (cells-based, no DDL per critical review):
-        // Rows with row_id starting '_' hold __type__/__enum__/__format__ style meta (e.g. status enum, price format).
-        // Filter them from main grid rows/columns for clean UI; meta remains queryable in store for future use.
-        // (Note: full client GridColumn type augmentation per original review rec is out of this data-seed scope; exclusion sufficient.)
-        const normalRows = cellRows.filter(
-          (r: any) => !String(r.row_id || '').startsWith('_'),
-        );
+        const cellRows = (result?.rows || result || []) as CellRow[];
+        // Meta rows (row_id `_meta`, etc.) hold `__{columnId}_meta` cells for type/enum/format hints.
+        const normalRows = cellRows.filter((r) => !isMetaRowId(String(r.row_id || '')));
         const rowMap = new Map<string, Record<string, string>>();
 
         for (const row of normalRows) {
@@ -416,13 +416,7 @@ export async function startApi(): Promise<void> {
           rowMap.set(rowId, values);
         }
 
-        const columnIds = [
-          ...new Set(normalRows.map((r: any) => r.column_id)),
-        ] as string[];
-        const columns = columnIds.map((id: string) => ({
-          columnId: id,
-          label: id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        }));
+        const columns = buildWorkbookColumnsFromCells(cellRows);
 
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(

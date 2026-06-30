@@ -1,5 +1,5 @@
 ---
-version: "0.17.0"
+version: "0.18.0"
 last-reviewed: "2026-06-27"
 status: "Approved"
 ---

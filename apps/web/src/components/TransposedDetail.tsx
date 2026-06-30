@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import type { GridRow, GridColumn, CommandState } from "./SpreadsheetGrid";
+import {
+  formatDisplayValue,
+  isColumnEditable,
+  protectedCellTitle,
+} from "../lib/columnMetaUtils";
 import { EMPTY_STATE_COPY } from "../lib/emptyStateCopy";
+import { CellValueEditor } from "@erp/ui/CellValueEditor";
 
 interface TransposedDetailProps {
   row: GridRow | null;
@@ -67,6 +73,11 @@ export function TransposedDetail({
     setEditingField(null);
   };
 
+  const handleFieldCancel = (columnId: string) => {
+    setEditedValues((prev) => ({ ...prev, [columnId]: row.values[columnId] || "" }));
+    setEditingField(null);
+  };
+
   return (
     <div className="panel-body">
       <div style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: "var(--space-md)", marginBottom: "var(--space-lg)" }}>
@@ -87,11 +98,14 @@ export function TransposedDetail({
               : editedValues[col.columnId] || "";
           const isFieldEditing = editingField === col.columnId;
           const label = statusLabel(cmdState?.state, cmdState?.error);
+          const editable = isColumnEditable(col);
+          const protectedTitle = protectedCellTitle(col);
+          const formattedDisplay = formatDisplayValue(displayVal, col);
 
           return (
             <div
               key={col.columnId}
-              className={`detail-field ${fieldStatusClass(cmdState?.state)}`}
+              className={`detail-field ${fieldStatusClass(cmdState?.state)} ${!editable ? "detail-field--protected" : ""}`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -106,47 +120,46 @@ export function TransposedDetail({
               </div>
 
               <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-                {isFieldEditing ? (
-                  <input
-                    type="text"
-                    className="input input--sm"
+                {isFieldEditing && editable ? (
+                  <CellValueEditor
+                    column={col}
                     value={displayVal}
-                    onChange={(e) => handleFieldChange(col.columnId, e.target.value)}
-                    onBlur={() => handleFieldCommit(col.columnId)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleFieldCommit(col.columnId);
-                      } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        setEditedValues((prev) => ({ ...prev, [col.columnId]: row.values[col.columnId] || "" }));
-                        setEditingField(null);
-                      }
-                    }}
-                    autoFocus
-                    style={{ width: "100%" }}
+                    editing
+                    onChange={(val) => handleFieldChange(col.columnId, val)}
+                    onCommit={() => handleFieldCommit(col.columnId)}
+                    onCancel={() => handleFieldCancel(col.columnId)}
+                    className="input input--sm"
                   />
                 ) : (
                   <div
-                    role="button"
-                    tabIndex={0}
+                    role={editable ? "button" : undefined}
+                    tabIndex={editable ? 0 : undefined}
                     className="detail-field-value"
-                    onClick={() => setEditingField(col.columnId)}
+                    onClick={() => editable && setEditingField(col.columnId)}
                     onKeyDown={(e) => {
+                      if (!editable) return;
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         setEditingField(col.columnId);
                       }
                     }}
+                    title={protectedTitle || undefined}
                     style={{
                       padding: "var(--space-xs) 0",
-                      cursor: "text",
+                      cursor: editable ? "text" : "not-allowed",
                       minHeight: 24,
-                      color: "var(--color-text)",
+                      color: editable ? "var(--color-text)" : "var(--color-text-muted)",
                       flex: 1
                     }}
                   >
-                    {displayVal || <span style={{ color: "var(--color-text-muted)", fontStyle: "italic" }}>Empty</span>}
+                    {formattedDisplay || (
+                      <span style={{ color: "var(--color-text-muted)", fontStyle: "italic" }}>Empty</span>
+                    )}
+                    {!editable && (
+                      <span className="detail-field__lock" aria-hidden="true" style={{ marginLeft: "var(--space-xs)" }}>
+                        🔒
+                      </span>
+                    )}
                   </div>
                 )}
 

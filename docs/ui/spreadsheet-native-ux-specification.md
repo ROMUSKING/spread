@@ -1,6 +1,6 @@
 ---
-version: "0.17.0"
-last-reviewed: "2026-06-27"
+version: "0.18.0"
+last-reviewed: "2026-06-30"
 status: "active implementation specification"
 ---
 
@@ -110,3 +110,73 @@ Manual validation of common business operations can be executed on `http://local
    - Click the row number gutter for the "USB-C Hub" row to select it.
    - Press Delete.
    - Verify that the row is removed from the grid and subsequent rows re-number automatically.
+
+---
+
+## 5. Column Metadata Rendering
+
+Columns may carry optional metadata discovered from cells-convention meta rows (`__type__`, `__enum__`, `__format__`):
+
+| Meta type | UI behavior |
+|---|---|
+| `enum` | Render `<select>` with `enumOptions`; commit via `cell.update` |
+| `number` | Numeric input with validation hint; optional `format: currency` display |
+| `text` (default) | Plain text input (current behavior) |
+| `readOnly` / `protected` | Non-editable cell with visual lock; domain commands or action columns required |
+
+**Contract:** Extend `GridColumn` with optional `type`, `format`, `enumOptions`, `readOnly`, `protected`. Server column discovery in `apps/api/src/server.ts` returns these fields when meta rows exist.
+
+**Work order:** AGENT-061.
+
+---
+
+## 6. Action Columns and Gesture Commands
+
+Business operations remain command-first but may be triggered from spreadsheet-native affordances:
+
+- **Action columns:** Client-only virtual columns (e.g. `[Allocate]`, `[Confirm]`) that submit domain commands on click or special value commit.
+- **Gutter/context gestures:** Selected row actions (fulfill, adjust inventory) invoke `command_api` with the same optimistic lifecycle as cell edits.
+- **Business Command Center tile:** Existing forms remain the structured alternative; action columns reduce context switching.
+
+All mutations use existing `commandClient.submit()` — no new mutation paths.
+
+**Work order:** AGENT-061 (first action column prototype), AGENT-100 (metadata hooks).
+
+---
+
+## 7. Cross-Workbook Reactivity
+
+When a domain command affects multiple workbooks, outbox events may include:
+
+```json
+{ "affects_workbooks": ["workbook-uuid-1", "workbook-uuid-2"] }
+```
+
+**Client behavior:**
+
+1. On SSE event with `affects_workbooks`, refresh all open tiles whose `workbookId` is listed.
+2. Use relations graph edges as fallback when `affects_workbooks` is absent.
+3. On `SYNC_REQUIRED`, full refresh with stable user-facing copy per `docs/dev/client-optimistic-ui-and-conflicts.md`.
+
+**Work order:** AGENT-062.
+
+---
+
+## 8. Grouped Flattened Views
+
+For flattened workbooks (e.g. SalesOrders with `*-HDR` header rows and line rows):
+
+- Detect groups by `order_id` or HDR/LINE row_id convention.
+- Render collapsible group headers with summary fields (customer, status).
+- Transposed detail targets the focused line; header context available in group summary.
+- Zero storage change; client-side projection only.
+
+**Work order:** AGENT-063.
+
+---
+
+## 9. Grid Scalability and DAR
+
+- **Immediate:** `react-window` row virtualization in `SpreadsheetGrid` (AGENT-064).
+- **POC:** Glide Data Grid branch per `docs/adr/ADR-0028-grid-engine-dar.md`.
+- **Benchmark:** BENCH-UX-001 (100k rows with transposed detail tile interactive).

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="0.17.1"
-SPEC="spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md"
+VERSION="0.18.0"
+SPEC="spec/spreadsheet_native_erp_technical_spec_v0_18_0_research_driven_phase0_ui_ux_audit_complete_execution.md"
 WAIVER_ID=""
 if [[ "${1:-}" == "--waiver" ]]; then
   WAIVER_ID="${2:-}"
@@ -22,10 +22,11 @@ required_files=(
   "scripts/validate-pack.sh" "scripts/smoke-typecheck.sh" "scripts/smoke-package-tests.sh" "scripts/package-smoke-tests.mjs" "scripts/smoke.sh"
   ".github/copilot-instructions.md" ".cursor/rules/phase0-boundaries.mdc" ".github/workflows/ci.yml" ".github/workflows/validate-pack.yml"
   "apps/AGENTS.md" "apps/api/AGENTS.md" "apps/web/AGENTS.md" "packages/AGENTS.md" "docs/AGENTS.md" "tests/AGENTS.md"
-  "$SPEC" "docs/snapshot-v0.17.0.md" "docs/pack-index.md" "docs/README.md"
+  "$SPEC" "docs/snapshot-v0.18.0.md" "docs/pack-index.md" "docs/README.md"
   "docs/qa/repository-smoke-test-v0.17.0.md" "docs/qa/bootstrap-completion-evidence-v0.17.0.md" "docs/qa/agent-simulation-run-v0.17.0.md"
-  "docs/implementation/project-directory-structure.md" "docs/implementation/code-stub-index.md" "docs/implementation/phase0-work-order-assignments-v0.17.0.md"
-  "docs/release/vertical-slice-release-note-template.md" "docs/changelog/CHANGELOG-v0.17.0.md" "docs/review/critical-review-v0.17.0.md"
+  "docs/implementation/project-directory-structure.md" "docs/implementation/code-stub-index.md" "docs/implementation/phase0-work-order-assignments-v0.18.0.md"
+  "docs/release/vertical-slice-release-note-template.md" "docs/changelog/CHANGELOG-v0.18.0.md" "docs/review/critical-review-v0.18.0.md"
+  "docs/adr/ADR-0028-grid-engine-dar.md"
   "docs/tech-stack-decisions.md" "docs/post-mvp/post-mvp-planes-vnext.md" "docs/process/validation-waiver-policy.md"
   "apps/api/package.json" "apps/web/package.json" "packages/domain/package.json" "packages/db/package.json" "packages/contracts/package.json" "packages/config/package.json" "packages/observability/package.json" "packages/testkit/package.json" "packages/ui/package.json"
   "apps/api/test/smoke.test.mjs" "apps/web/test/smoke.test.mjs" "packages/domain/test/smoke.test.mjs" "packages/db/test/smoke.test.mjs" "packages/contracts/test/smoke.test.mjs" "packages/config/test/smoke.test.mjs" "packages/observability/test/smoke.test.mjs" "packages/testkit/test/smoke.test.mjs" "packages/ui/test/smoke.test.mjs"
@@ -49,8 +50,8 @@ python3 - <<'PYVALID'
 from pathlib import Path
 import re, sys, yaml, json
 
-VERSION='0.17.1'
-SPEC=Path('spec/spreadsheet_native_erp_technical_spec_v0_17_0_research_driven_phase0_bootstrap_complete_execution.md')
+VERSION='0.18.0'
+SPEC=Path('spec/spreadsheet_native_erp_technical_spec_v0_18_0_research_driven_phase0_ui_ux_audit_complete_execution.md')
 
 class UniqueKeyLoader(yaml.SafeLoader): pass
 def construct_mapping(loader,node,deep=False):
@@ -140,15 +141,15 @@ for path, name in [('apps/api/package.json','@erp/api'),('apps/web/package.json'
         print(f'{path} missing package smoke test', file=sys.stderr); sys.exit(1)
 
 checks={
- 'README.md':['START HERE','docs/snapshot-v0.17.0.md','Bootstrap achieved','scripts/smoke-package-tests.sh'],
- 'AGENTS.md':['docs/snapshot-v0.17.0.md','scripts/smoke-package-tests.sh','Validation waiver mode'],
- 'docs/snapshot-v0.17.0.md':['Bootstrap achieved','Repository tree','What agents may NOT do today','AGENT-000 -> AGENT-001 -> AGENT-010'],
- 'docs/pack-index.md':['version: "0.17.0"','Bootstrap achieved','docs/qa/bootstrap-completion-evidence-v0.17.0.md'],
- str(SPEC):['Technical Specification v0.17.0','Bootstrap Completion Closure','smoke-package-tests.sh'],
+ 'README.md':['START HERE','docs/snapshot-v0.18.0.md','Bootstrap achieved','scripts/smoke-package-tests.sh'],
+ 'AGENTS.md':['docs/snapshot-v0.18.0.md','scripts/smoke-package-tests.sh','Validation waiver mode'],
+ 'docs/snapshot-v0.18.0.md':['Bootstrap achieved','Repository tree','What agents may NOT do today','AGENT-061'],
+ 'docs/pack-index.md':['version: "0.18.0"','Bootstrap achieved','docs/qa/bootstrap-completion-evidence-v0.17.0.md'],
+ str(SPEC):['Technical Specification v0.18.0','UI/UX Audit Closure','smoke-package-tests.sh'],
  'docs/qa/repository-smoke-test-v0.17.0.md':['package-smoke-tests','BENCH-REPO-003'],
  'docs/qa/bootstrap-completion-evidence-v0.17.0.md':['P0-EXEC-001 is considered green','AGENT-000 -> AGENT-001 -> AGENT-010'],
- 'docs/implementation/phase0-work-order-assignments-v0.17.0.md':['AGENT-010','AGENT-012','No post-MVP runtime dependency'],
- 'docs/data/sme-extended-variants-and-entities-spec.md':['version: "0.17.0"','ProductTemplates','Parties'],
+ 'docs/implementation/phase0-work-order-assignments-v0.18.0.md':['AGENT-061','AGENT-065','No post-MVP runtime dependency'],
+ 'docs/data/sme-extended-variants-and-entities-spec.md':['version: "0.18.0"','ProductTemplates','Parties'],
  'docs/release/vertical-slice-release-note-template.md':['One safe spreadsheet edit','Known exclusions'],
  'scripts/smoke-typecheck.sh':['local node_modules/.bin/tsc','pnpm exec tsc','global tsc','TypeScript smoke typecheck passed'],
  'scripts/smoke-package-tests.sh':['package-smoke-tests.mjs'],
@@ -187,12 +188,13 @@ for needed in ['package_smoke_tests_required','bootstrap_completion_declared_req
 active_files=['README.md','AGENTS.md','docs/pack-index.md','tests/manifest.yml','.github/workflows/validate-pack.yml','.github/workflows/ci.yml','docs/tech-stack-decisions.md','CHANGELOG.md','docs/README.md','package.json']
 for f in active_files:
     txt=Path(f).read_text(errors='ignore')
-    prior_snapshot = 'docs/snapshot-'+'v0.'+'16.'+'1'+'.md'
-    prior_spec = 'spec/spreadsheet_native_erp_technical_spec_'+'v0_16_'+'1_research_driven_phase0_bootstrap_complete_execution.md'
-    prior_changelog = 'docs/changelog/CHANGELOG-'+'v0.'+'16.'+'1'+'.md'
-    prior_agent_a = 'v0.'+'16.'+'1'
-    prior_agent_b = 'v0.'+'16.'+'0'
-    for stale in [prior_snapshot, prior_spec, prior_changelog, prior_agent_a, prior_agent_b]:
+    prior_snapshot = 'docs/snapshot-'+'v0.'+'17.'+'0'+'.md'
+    prior_spec = 'spec/spreadsheet_native_erp_technical_spec_'+'v0_17_'+'0_research_driven_phase0_bootstrap_complete_execution.md'
+    prior_changelog = 'docs/changelog/CHANGELOG-'+'v0.'+'17.'+'0'+'.md'
+    prior_assignments = 'phase0-work-order-assignments-'+'v0.'+'17.'+'0'+'.md'
+    prior_critical_review = 'critical-review-'+'v0.'+'17.'+'0'+'.md'
+    prior_impl_version = 'v0.'+'17.'+'1'
+    for stale in [prior_snapshot, prior_spec, prior_changelog, prior_assignments, prior_critical_review, prior_impl_version]:
         if stale in txt:
             print(f'Stale active reference {stale} in {f}', file=sys.stderr); sys.exit(1)
 
@@ -200,11 +202,11 @@ print('python validation checks passed')
 PYVALID
 pass
 
-require_grep "Bootstrap achieved" docs/snapshot-v0.17.0.md "snapshot missing bootstrap achieved note"
+require_grep "Bootstrap achieved" docs/snapshot-v0.18.0.md "snapshot missing bootstrap achieved note"
 require_grep "smoke-package-tests.sh" README.md "README missing package smoke command"
 require_grep "smoke-package-tests.sh" scripts/smoke.sh "smoke.sh does not run package smoke tests"
 require_grep "node --test test/smoke.test.mjs" packages/domain/package.json "package smoke test missing"
 
-printf 'Pack validation passed for v0.17.0.\n'
+printf 'Pack validation passed for v0.18.0.\n'
 printf 'Checks passed: %s/%s\n' "$PASS" "$CHECKS"
 printf 'Pack health score: 100/100\n'
