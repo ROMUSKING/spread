@@ -45,6 +45,14 @@ export type SalesOrderConfirmInput = {
   orderId: string;
 };
 
+export type FulfillmentAllocateInput = {
+  orderId: string;
+  lineId: string;
+  productId: string;
+  warehouseId: string;
+  qty: string;
+};
+
 export type PurchaseOrderCreateInput = {
   poId: string;
   supplierId: string;
@@ -90,6 +98,7 @@ export type BusinessActionStatusMap = {
   inventory: BusinessActionStatus;
   salesOrder: BusinessActionStatus;
   salesOrderConfirm: BusinessActionStatus;
+  fulfillmentAllocate: BusinessActionStatus;
   purchaseOrder: BusinessActionStatus;
   purchaseReceipt: BusinessActionStatus;
   party: BusinessActionStatus;
@@ -102,6 +111,7 @@ type BusinessCommandCenterProps = {
   onAdjustInventory: (input: InventoryAdjustInput) => Promise<boolean>;
   onCreateSalesOrder: (input: SalesOrderCreateInput) => Promise<boolean>;
   onConfirmSalesOrder: (input: SalesOrderConfirmInput) => Promise<boolean>;
+  onAllocateFulfillment: (input: FulfillmentAllocateInput) => Promise<boolean>;
   onCreatePurchaseOrder: (input: PurchaseOrderCreateInput) => Promise<boolean>;
   onReceivePurchaseOrder: (input: PurchaseOrderReceiveInput) => Promise<boolean>;
   onCreateParty: (input: PartyCreateInput) => Promise<boolean>;
@@ -254,6 +264,7 @@ export function BusinessCommandCenter({
   onAdjustInventory,
   onCreateSalesOrder,
   onConfirmSalesOrder,
+  onAllocateFulfillment,
   onCreatePurchaseOrder,
   onReceivePurchaseOrder,
   onCreateParty,
@@ -282,6 +293,13 @@ export function BusinessCommandCenter({
   });
   const [salesOrderConfirm, setSalesOrderConfirm] = useState<SalesOrderConfirmInput>({
     orderId: "",
+  });
+  const [fulfillmentAllocate, setFulfillmentAllocate] = useState<FulfillmentAllocateInput>({
+    orderId: "",
+    lineId: "1",
+    productId: "",
+    warehouseId: "",
+    qty: "1",
   });
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrderCreateInput>({
     poId: "",
@@ -433,6 +451,34 @@ export function BusinessCommandCenter({
             </ActionForm>
           </SectionCard>
           <ActionStatusCard title="Sales order confirm" status={statuses.salesOrderConfirm} />
+
+          <SectionCard
+            title="Allocate Stock"
+            description="Reserve inventory for a confirmed sales order line and transition it to ALLOCATED."
+          >
+            <ActionForm
+              submitLabel="Allocate fulfillment"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (await onAllocateFulfillment(fulfillmentAllocate)) {
+                  setFulfillmentAllocate({
+                    orderId: "",
+                    lineId: "1",
+                    productId: "",
+                    warehouseId: "",
+                    qty: "1",
+                  });
+                }
+              }}
+            >
+              <LabeledInput label="Order ID" value={fulfillmentAllocate.orderId} onChange={(value) => setFulfillmentAllocate((prev) => ({ ...prev, orderId: value }))} placeholder="SO-001" />
+              <LabeledInput label="Line ID" value={fulfillmentAllocate.lineId} onChange={(value) => setFulfillmentAllocate((prev) => ({ ...prev, lineId: value }))} placeholder="1" />
+              <LabeledInput label="Product ID" value={fulfillmentAllocate.productId} onChange={(value) => setFulfillmentAllocate((prev) => ({ ...prev, productId: value }))} placeholder="PROD-0001" />
+              <LabeledInput label="Warehouse ID" value={fulfillmentAllocate.warehouseId} onChange={(value) => setFulfillmentAllocate((prev) => ({ ...prev, warehouseId: value }))} placeholder="w1" />
+              <LabeledInput label="Qty" value={fulfillmentAllocate.qty} onChange={(value) => setFulfillmentAllocate((prev) => ({ ...prev, qty: value }))} type="number" />
+            </ActionForm>
+          </SectionCard>
+          <ActionStatusCard title="Stock reserve" status={statuses.fulfillmentAllocate} />
         </>
       )}
 

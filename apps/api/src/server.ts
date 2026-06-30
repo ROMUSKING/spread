@@ -33,6 +33,7 @@ import {
   PurchaseOrderReceiveHandler,
 } from './commands/handlers/PurchaseHandlers';
 import {
+  FulfillmentAllocateHandler,
   SalesOrderConfirmHandler,
   SalesOrderCreateHandler,
 } from './commands/handlers/SalesHandlers';
@@ -226,6 +227,7 @@ export async function startApi(): Promise<void> {
   handlers.set('product.create', new ProductCreateHandler());
   handlers.set('salesOrder.create', new SalesOrderCreateHandler());
   handlers.set('salesOrder.confirm', new SalesOrderConfirmHandler());
+  handlers.set('fulfillment.allocate', new FulfillmentAllocateHandler());
   handlers.set('purchaseOrder.create', new PurchaseOrderCreateHandler());
   handlers.set('purchaseOrder.receive', new PurchaseOrderReceiveHandler());
   // Extended master data handlers

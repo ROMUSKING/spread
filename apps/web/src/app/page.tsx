@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   type BusinessActionStatusMap,
+  type FulfillmentAllocateInput,
   type InventoryAdjustInput,
   type PartyCreateInput,
   type ProductCreateInput,
@@ -210,6 +211,7 @@ export default function Page() {
   const inventoryAdjustCmd = useCommand("inventory.adjust", { tenantId, baseUrl: apiBaseUrl });
   const salesOrderCreateCmd = useCommand("salesOrder.create", { tenantId, baseUrl: apiBaseUrl });
   const salesOrderConfirmCmd = useCommand("salesOrder.confirm", { tenantId, baseUrl: apiBaseUrl });
+  const fulfillmentAllocateCmd = useCommand("fulfillment.allocate", { tenantId, baseUrl: apiBaseUrl });
   const purchaseOrderCreateCmd = useCommand("purchaseOrder.create", { tenantId, baseUrl: apiBaseUrl });
   const purchaseOrderReceiveCmd = useCommand("purchaseOrder.receive", { tenantId, baseUrl: apiBaseUrl });
   const partyCreateCmd = useCommand("party.create", { tenantId, baseUrl: apiBaseUrl });
@@ -931,6 +933,33 @@ export default function Page() {
     [runBusinessCommand, salesOrderConfirmCmd]
   );
 
+  const handleAllocateFulfillment = useCallback(
+    async (input: FulfillmentAllocateInput) => {
+      return runBusinessCommand({
+        controller: fulfillmentAllocateCmd,
+        payload: {
+          orderId: input.orderId,
+          lines: [
+            {
+              lineId: input.lineId,
+              productId: input.productId,
+              warehouseId: input.warehouseId,
+              qty: Number(input.qty),
+            },
+          ],
+        },
+        workbookId: "00000000-0000-0000-0000-000000000015",
+        refreshWorkbooks: [
+          "00000000-0000-0000-0000-000000000015",
+          "00000000-0000-0000-0000-000000000014",
+        ],
+        successMessage: `Stock reserved for ${input.orderId}:${input.lineId}.`,
+        commandLabel: "Stock reservation",
+      });
+    },
+    [fulfillmentAllocateCmd, runBusinessCommand]
+  );
+
   const handleCreatePurchaseOrder = useCallback(
     async (input: PurchaseOrderCreateInput) => {
       return runBusinessCommand({
@@ -1043,6 +1072,13 @@ export default function Page() {
       error: salesOrderConfirmCmd.error?.message || null,
       elapsedMs: salesOrderConfirmCmd.elapsedMs,
       reset: salesOrderConfirmCmd.refresh,
+    },
+    fulfillmentAllocate: {
+      state: fulfillmentAllocateCmd.state,
+      commandId: fulfillmentAllocateCmd.commandId,
+      error: fulfillmentAllocateCmd.error?.message || null,
+      elapsedMs: fulfillmentAllocateCmd.elapsedMs,
+      reset: fulfillmentAllocateCmd.refresh,
     },
     purchaseOrder: {
       state: purchaseOrderCreateCmd.state,
@@ -1157,6 +1193,7 @@ export default function Page() {
         onAdjustInventory={handleAdjustInventory}
         onCreateSalesOrder={handleCreateSalesOrder}
         onConfirmSalesOrder={handleConfirmSalesOrder}
+        onAllocateFulfillment={handleAllocateFulfillment}
         onCreatePurchaseOrder={handleCreatePurchaseOrder}
         onReceivePurchaseOrder={handleReceivePurchaseOrder}
         onCreateParty={handleCreateParty}

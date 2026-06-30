@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   BusinessCommandCenter,
   type BusinessActionStatusMap,
+  type FulfillmentAllocateInput,
   type InventoryAdjustInput,
   type PartyCreateInput,
   type ProductCreateInput,
@@ -131,6 +132,7 @@ interface TiledWorkspaceProps {
   onAdjustInventory: (input: InventoryAdjustInput) => Promise<boolean>;
   onCreateSalesOrder: (input: SalesOrderCreateInput) => Promise<boolean>;
   onConfirmSalesOrder: (input: SalesOrderConfirmInput) => Promise<boolean>;
+  onAllocateFulfillment: (input: FulfillmentAllocateInput) => Promise<boolean>;
   onCreatePurchaseOrder: (input: PurchaseOrderCreateInput) => Promise<boolean>;
   onReceivePurchaseOrder: (input: PurchaseOrderReceiveInput) => Promise<boolean>;
   onCreateParty: (input: PartyCreateInput) => Promise<boolean>;
@@ -157,6 +159,7 @@ export function TiledWorkspace({
   onAdjustInventory,
   onCreateSalesOrder,
   onConfirmSalesOrder,
+  onAllocateFulfillment,
   onCreatePurchaseOrder,
   onReceivePurchaseOrder,
   onCreateParty,
@@ -419,6 +422,7 @@ export function TiledWorkspace({
                     onAdjustInventory={onAdjustInventory}
                     onCreateSalesOrder={onCreateSalesOrder}
                     onConfirmSalesOrder={onConfirmSalesOrder}
+                    onAllocateFulfillment={onAllocateFulfillment}
                     onCreatePurchaseOrder={onCreatePurchaseOrder}
                     onReceivePurchaseOrder={onReceivePurchaseOrder}
                     onCreateParty={onCreateParty}

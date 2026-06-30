@@ -7,7 +7,7 @@ This package is part of the TypeScript-first Phase 0 monorepo skeleton. Implemen
 
 ## Current business command surface
 
-The API now exposes Phase 0 business handlers for product creation, party setup, inventory adjustment, sales-order creation, sales-order confirmation, purchase-order creation, and purchase-order receiving. These handlers stay inside the shared command processor, transaction boundary, and outbox-driven delivery model.
+The API now exposes Phase 0 business handlers for product creation, party setup, inventory adjustment, sales-order creation, sales-order confirmation, fulfillment allocation, purchase-order creation, and purchase-order receiving. These handlers stay inside the shared command processor, transaction boundary, and outbox-driven delivery model.
 
 Canonical guidance:
 

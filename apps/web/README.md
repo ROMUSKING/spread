@@ -7,7 +7,7 @@ This package is part of the TypeScript-first Phase 0 monorepo skeleton. Implemen
 
 ## Current business command surface
 
-The web shell now includes a business-actions tile that routes product, party, inventory, sales-order creation and confirmation, purchase-order setup, and purchase-order receiving through `command_api`. It remains a command-first surface: no direct workbook table writes are introduced from the UI.
+The web shell now includes a business-actions tile that routes product, party, inventory, sales-order creation, confirmation, and allocation, plus purchase-order setup and receiving, through `command_api`. It remains a command-first surface: no direct workbook table writes are introduced from the UI.
 
 Canonical guidance:
 

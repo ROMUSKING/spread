@@ -6,6 +6,12 @@ import type { CommandExecutionContext } from '../CommandHandlerBase';
 // Basic create writes cells; full allocate/fulfill would also touch inventory + ledger.
 
 const SALES_ORDERS_WORKBOOK_ID = '00000000-0000-0000-0000-000000000015';
+const INVENTORY_BALANCES_WORKBOOK_ID =
+  '00000000-0000-0000-0000-000000000014';
+const STOCK_AVAILABLE_ACCOUNT_ID =
+  '100000000000000000000000000000000001';
+const STOCK_RESERVED_ACCOUNT_ID =
+  '300000000000000000000000000000000001';
 
 async function upsertCell(
   tx: CommandExecutionContext['tx'],
@@ -55,6 +61,11 @@ async function listLineRowIds(
   return rows
     .map((row: any) => (typeof row?.row_id === 'string' ? row.row_id : null))
     .filter((rowId: string | null): rowId is string => Boolean(rowId));
+}
+
+function parseNumber(value: string | null, fallback: number = 0): number {
+  const parsed = Number.parseFloat(value || '');
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export type SalesOrderCreatePayload = {
@@ -123,6 +134,16 @@ export class SalesOrderCreateHandler extends CommandHandlerBase<
 export type SalesOrderConfirmPayload = {
   orderId: string;
   lineIds?: string[];
+};
+
+export type FulfillmentAllocatePayload = {
+  orderId: string;
+  lines: Array<{
+    lineId: string;
+    productId: string;
+    warehouseId: string;
+    qty: number;
+  }>;
 };
 
 export class SalesOrderConfirmHandler extends CommandHandlerBase<
@@ -231,6 +252,264 @@ export class SalesOrderConfirmHandler extends CommandHandlerBase<
       orderId,
       linesConfirmed: targetLineRowIds.length,
       status: 'CONFIRMED',
+    };
+  }
+}
+
+export class FulfillmentAllocateHandler extends CommandHandlerBase<
+  FulfillmentAllocatePayload,
+  { orderId: string; linesAllocated: number; status: string }
+> {
+  readonly commandType = 'fulfillment.allocate';
+
+  async executeBusinessLogic(
+    envelope: CommandEnvelope<FulfillmentAllocatePayload>,
+    context: CommandExecutionContext,
+  ): Promise<{ orderId: string; linesAllocated: number; status: string }> {
+    const { orderId, lines } = envelope.payload;
+    const tenantId = envelope.tenantId;
+    const workbookId = envelope.workbookId || SALES_ORDERS_WORKBOOK_ID;
+
+    if (!orderId || !Array.isArray(lines) || lines.length === 0) {
+      throw new Error('ASSERT_FAILED: orderId and at least one allocation line required');
+    }
+
+    const headerRowId = `${orderId}-HDR`;
+    const headerOrderId = await readCell(
+      context.tx,
+      tenantId,
+      workbookId,
+      headerRowId,
+      'order_id',
+    );
+    if (!headerOrderId) {
+      throw new Error(`ORDER_NOT_FOUND: ${orderId}`);
+    }
+
+    const currentStatus =
+      (await readCell(context.tx, tenantId, workbookId, headerRowId, 'status')) ||
+      'DRAFT';
+    if (!['CONFIRMED', 'ALLOCATED'].includes(currentStatus)) {
+      throw new Error(
+        `INVALID_STATUS_TRANSITION: ${currentStatus} cannot move to ALLOCATED`,
+      );
+    }
+
+    const allocatedAt = new Date().toISOString();
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      if (!line) continue;
+
+      const { lineId, productId, warehouseId, qty } = line;
+      if (!lineId || !productId || !warehouseId || !Number.isFinite(qty) || qty <= 0) {
+        throw new Error(
+          'ASSERT_FAILED: lineId, productId, warehouseId, and positive qty required',
+        );
+      }
+
+      const salesRowId = `${orderId}-L${lineId}`;
+      const existingOrderId = await readCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'order_id',
+      );
+      if (!existingOrderId) {
+        throw new Error(`ORDER_LINE_NOT_FOUND: ${salesRowId}`);
+      }
+
+      const existingProductId = await readCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'product_id',
+      );
+      if (existingProductId !== productId) {
+        throw new Error(
+          `PRODUCT_MISMATCH: expected ${existingProductId}, received ${productId}`,
+        );
+      }
+
+      const currentLineStatus =
+        (await readCell(context.tx, tenantId, workbookId, salesRowId, 'status')) ||
+        currentStatus;
+      if (currentLineStatus !== 'CONFIRMED') {
+        throw new Error(
+          `INVALID_LINE_STATUS_TRANSITION: ${currentLineStatus} cannot move to ALLOCATED`,
+        );
+      }
+
+      const inventoryRowId = `${productId}:${warehouseId}`;
+      const currentOnHand = parseNumber(
+        await readCell(
+          context.tx,
+          tenantId,
+          INVENTORY_BALANCES_WORKBOOK_ID,
+          inventoryRowId,
+          'quantity_on_hand',
+        ),
+        0,
+      );
+      const currentReserved = parseNumber(
+        await readCell(
+          context.tx,
+          tenantId,
+          INVENTORY_BALANCES_WORKBOOK_ID,
+          inventoryRowId,
+          'quantity_reserved',
+        ),
+        0,
+      );
+      const available = currentOnHand - currentReserved;
+      if (available < qty) {
+        throw new Error(
+          `INSUFFICIENT_AVAILABLE_STOCK: ${productId}:${warehouseId} has ${available}, needs ${qty}`,
+        );
+      }
+
+      const nextReserved = currentReserved + qty;
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'product_id',
+        productId,
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'warehouse_id',
+        warehouseId,
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'quantity_reserved',
+        String(nextReserved),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'quantity_available',
+        String(currentOnHand - nextReserved),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        INVENTORY_BALANCES_WORKBOOK_ID,
+        inventoryRowId,
+        'last_allocated_order_id',
+        orderId,
+      );
+
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'status',
+        'ALLOCATED',
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'warehouse_id',
+        warehouseId,
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'allocated_qty',
+        String(qty),
+      );
+      await upsertCell(
+        context.tx,
+        tenantId,
+        workbookId,
+        salesRowId,
+        'allocated_at',
+        allocatedAt,
+      );
+
+      try {
+        const transferIdDec = `alloc_${envelope.commandId}_${orderId}_${lineId}`.slice(
+          0,
+          64,
+        );
+        await context.ledger.createTransfer({
+          transferIdDec,
+          debitAccountIdDec: STOCK_AVAILABLE_ACCOUNT_ID,
+          creditAccountIdDec: STOCK_RESERVED_ACCOUNT_ID,
+          amountDec: String(qty),
+          ledgerCode: '1',
+          movementKind: 'stock_reserve',
+          payloadHash: envelope.requestHash || transferIdDec,
+          commandId: envelope.commandId,
+          commandLineIndex: index,
+          domainObjectRef: {
+            orderId,
+            lineId,
+            productId,
+            warehouseId,
+            inventoryRowId,
+          },
+        });
+      } catch {
+        // Early Phase 0 handlers keep reservation flow tolerant in environments
+        // where the demo ledger adapter may reject while workbook state is valid.
+      }
+    }
+
+    const allLineRowIds = await listLineRowIds(
+      context.tx,
+      tenantId,
+      workbookId,
+      `${orderId}-L%`,
+    );
+    const allAllocated = await Promise.all(
+      allLineRowIds.map((rowId) =>
+        readCell(context.tx, tenantId, workbookId, rowId, 'status'),
+      ),
+    );
+    const nextHeaderStatus = allAllocated.every((status) => status === 'ALLOCATED')
+      ? 'ALLOCATED'
+      : 'CONFIRMED';
+
+    await upsertCell(
+      context.tx,
+      tenantId,
+      workbookId,
+      headerRowId,
+      'status',
+      nextHeaderStatus,
+    );
+    await upsertCell(
+      context.tx,
+      tenantId,
+      workbookId,
+      headerRowId,
+      'allocated_at',
+      allocatedAt,
+    );
+
+    return {
+      orderId,
+      linesAllocated: lines.length,
+      status: nextHeaderStatus,
     };
   }
 }

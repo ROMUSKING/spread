@@ -114,6 +114,7 @@ As of 2026-06-30, the current repository implementation covers these domain comm
 - `inventory.adjust`
 - `salesOrder.create`
 - `salesOrder.confirm`
+- `fulfillment.allocate`
 - `purchaseOrder.create`
 - `purchaseOrder.receive`
 - `productTemplate.create`
@@ -263,8 +264,8 @@ These are enforced in evidence tests and validate-invariants runs. Demo handlers
 3. `warehouse.create`.  
 4. `inventory.adjust` (or `inventory.receive` / `cycleCount`) — payload {productId, warehouseId, delta, reason, effectiveAt}. Handler: read current (or compute), write cells for on_hand, createTransfer on stock ledger (debit available account, credit adjustment). Enforce non-neg via ledger constraint or precheck.  
 5. `salesOrder.create` — payload header + lines[]. Handler: generate order_id, for each line write cells (row_id e.g. `${orderId}-L${i}`), validate products, compute totals (write line_total cells). Optional initial reserve. Outbox: 'salesOrder.created'.  
-6. `salesOrder.confirm` — implemented in the current slice as the DRAFT → CONFIRMED status transition for the order header plus all order lines; allocation/reserve remains a separate follow-on command.  
-7. `fulfillment.allocate` (or reserve) — {orderId, lines or all}. Compute available via cells or ledger projection. Write reservations (cells + ledger pending/reserved transfer). Batch partition groups by product+warehouse. Outbox 'stock.reserved', 'order.allocated'.  
+6. `salesOrder.confirm` — implemented in the current slice as the DRAFT → CONFIRMED status transition for the order header plus all order lines.  
+7. `fulfillment.allocate` (or reserve) — implemented in the current slice for explicit order lines. It computes available stock from inventory cells, writes `quantity_reserved` / `quantity_available`, marks the target order lines as `ALLOCATED`, and posts a best-effort `stock_reserve` ledger movement in the same pattern as other MVP handlers.  
 8. `order.fulfillShip` (pick/pack/ship) — move reserved->shipped cells + ledger transfers (available/reserved -> shipped status accounts). Write fulfillment row/cells. Update order status. Ledger: COGS effect (inventory asset credit, expense debit) + AR if invoiced.  
 9. `purchaseOrder.create` / `purchaseOrder.receive` — on receive: increase on_hand (cells + stock ledger transfer), basic 3-way match (see pseudocode: qty within +/-5% of PO or flag variance; price exact or variance; partials allowed with flag; post only on match-or-accepted).  
 10. `invoice.create` / `payment.record` — financial: AR debit/credit transfers, cash, revenue recognition.  
@@ -483,7 +484,7 @@ async executeBusinessLogic(envelope: CommandEnvelope<InventoryReturnReceiptPaylo
 DRAFT (create) → CONFIRMED (confirm cmd) → ALLOCATED (allocate cmd, reserves posted) → SHIPPED (fulfillShip) → INVOICED (invoice) → CLOSED.  
 Transitions enforced in handler: query current status cells, reject invalid, write new status + side effects atomically. Status stored as column value (visible/editable with care in grid; domain cmds drive it).
 
-Current implemented transition coverage includes `salesOrder.confirm` for DRAFT → CONFIRMED and `purchaseOrder.receive` for PO lines/header moving to PARTIAL or RECEIVED. Allocation, shipment, invoicing, and returns remain follow-on slices.
+Current implemented transition coverage includes `salesOrder.confirm` for DRAFT → CONFIRMED, `fulfillment.allocate` for CONFIRMED → ALLOCATED with inventory reservation, and `purchaseOrder.receive` for PO lines/header moving to PARTIAL or RECEIVED. Shipment, invoicing, and returns remain follow-on slices.
 
 **Ledger account patterns (examples, per contract):**  
 Stock ledger (code 1 or tenant SKU-derived):  
